@@ -1,95 +1,81 @@
-import { getApiKey } from '@/lib/storage';
-import { ANALYSIS_SYSTEM_PROMPT, buildAnalysisPrompt } from '@/lib/prompts';
+import { signInWithEmail, signOut, getAuthState } from '@/lib/auth';
+import { supabase, initializeSession, getStoredSession, getCurrentUser, SUPABASE_URL } from '@/lib/supabase';
+import {
+  addFavorite,
+  removeFavorite,
+  checkIsFavorited,
+  getFavoritesByArticle,
+  getFavoritesByExpression,
+  searchFavorites,
+  getArticleFavorites,
+} from '@/lib/favorites';
 import type { 
   Message, 
   AnalyzeTextResponse, 
   ExtractContentResponse,
   HighlightTextResponse,
-  ClearHighlightsResponse
+  ClearHighlightsResponse,
+  SignInEmailResponse,
+  SignOutResponse,
+  GetAuthStateResponse,
+  AddFavoriteResponse,
+  RemoveFavoriteResponse,
+  CheckIsFavoritedResponse,
+  GetFavoritesByArticleResponse,
+  GetFavoritesByExpressionResponse,
+  SearchFavoritesResponse,
+  GetArticleFavoritesResponse,
 } from '@/lib/messages';
 import type { AnalysisResult } from '@/lib/storage';
 
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
-
-// Call DeepSeek API for analysis
-async function analyzeWithDeepSeek(text: string): Promise<AnalyzeTextResponse> {
-  const apiKey = await getApiKey();
+// Call Supabase Edge Function for analysis
+async function analyzeWithEdgeFunction(text: string): Promise<AnalyzeTextResponse> {
+  const session = await getStoredSession();
   
-  if (!apiKey) {
+  if (!session) {
     return {
       success: false,
-      error: 'API Key not configured. Please set your DeepSeek API key in settings.',
+      error: '请先登录后再进行分析',
     };
   }
   
   try {
-    const response = await fetch(DEEPSEEK_API_URL, {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/analyze`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          {
-            role: 'system',
-            content: ANALYSIS_SYSTEM_PROMPT,
-          },
-          {
-            role: 'user',
-            content: buildAnalysisPrompt(text),
-          },
-        ],
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-      }),
+      body: JSON.stringify({ text }),
     });
     
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorMessage = errorData.error?.message || `API request failed with status ${response.status}`;
-      return {
-        success: false,
-        error: errorMessage,
-      };
-    }
-    
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
     
-    if (!content) {
+    if (!response.ok) {
+      // Handle specific error codes
+      if (data.code === 'DAILY_LIMIT_EXCEEDED') {
+        return {
+          success: false,
+          error: data.message || '今日免费次数已用完',
+          code: data.code,
+          usage: data.usage,
+        };
+      }
       return {
         success: false,
-        error: 'No response content from DeepSeek API',
-      };
-    }
-    
-    // Parse the JSON response
-    const analysis: AnalysisResult = JSON.parse(content);
-    
-    // Validate the structure
-    if (!analysis.idioms || !analysis.syntax || !analysis.vocabulary) {
-      return {
-        success: false,
-        error: 'Invalid analysis format received from API',
+        error: data.error || `请求失败: ${response.status}`,
       };
     }
     
     return {
       success: true,
-      data: analysis,
+      data: data.data as AnalysisResult,
+      usage: data.usage,
     };
   } catch (error) {
-    if (error instanceof SyntaxError) {
-      return {
-        success: false,
-        error: 'Failed to parse API response as JSON',
-      };
-    }
     return {
       success: false,
-      error: `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error: `分析失败: ${error instanceof Error ? error.message : '未知错误'}`,
     };
   }
 }
@@ -99,13 +85,113 @@ async function sendToContentScript<T>(message: Message): Promise<T> {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   
   if (!tab?.id) {
-    throw new Error('No active tab found');
+    throw new Error('未找到活动标签页');
+  }
+
+  // Check if it's a special page that doesn't allow content scripts
+  const url = tab.url || '';
+  if (url.startsWith('chrome://') || url.startsWith('chrome-extension://') || 
+      url.startsWith('edge://') || url.startsWith('about:') ||
+      url.startsWith('file://') || url === '') {
+    throw new Error('此页面不支持分析，请在普通网页上使用');
   }
   
-  return await browser.tabs.sendMessage(tab.id, message);
+  try {
+    return await browser.tabs.sendMessage(tab.id, message);
+  } catch (error) {
+    // Content script not loaded - try to inject it
+    if (String(error).includes('Receiving end does not exist') ||
+        String(error).includes('Could not establish connection')) {
+      throw new Error('请刷新页面后重试（扩展更新后需要刷新页面）');
+    }
+    throw error;
+  }
+}
+
+// Handle sign in with email
+async function handleSignIn(email: string, password: string): Promise<SignInEmailResponse> {
+  const { session, error } = await signInWithEmail(email, password);
+  
+  if (error) {
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+  
+  return {
+    success: Boolean(session),
+    error: session ? undefined : '登录失败',
+  };
+}
+
+// Handle sign out
+async function handleSignOut(): Promise<SignOutResponse> {
+  await signOut();
+  return { success: true };
+}
+
+// Handle get auth state
+async function handleGetAuthState(): Promise<GetAuthStateResponse> {
+  try {
+    const authState = await getAuthState();
+    
+    if (!authState.isAuthenticated || !authState.user) {
+      return {
+        success: true,
+        isAuthenticated: false,
+      };
+    }
+
+    // Get usage count
+    let usage = { used: 0, limit: 5, isPro: authState.profile?.is_pro || false };
+    
+    if (authState.profile) {
+      const session = await getStoredSession();
+      if (session) {
+        try {
+          const { data } = await supabase.rpc('get_daily_usage_count', { 
+            p_user_id: authState.user.id 
+          });
+          usage.used = data || 0;
+          if (authState.profile.is_pro) {
+            usage.limit = null as unknown as number;
+          }
+        } catch (e) {
+          console.error('Error fetching usage:', e);
+        }
+      }
+    }
+
+    return {
+      success: true,
+      isAuthenticated: true,
+      user: {
+        id: authState.user.id,
+        email: authState.user.email || '',
+        name: authState.user.user_metadata?.full_name || authState.user.user_metadata?.name,
+        avatarUrl: authState.user.user_metadata?.avatar_url,
+      },
+      profile: {
+        isPro: authState.profile?.is_pro || false,
+      },
+      usage,
+    };
+  } catch (error) {
+    console.error('Error getting auth state:', error);
+    return {
+      success: false,
+      isAuthenticated: false,
+    };
+  }
 }
 
 export default defineBackground(() => {
+  // Initialize session on startup
+  initializeSession().then((session) => {
+    console.log('[Nuance] Session initialized:', session ? 'logged in' : 'not logged in');
+  });
+
   // Handle extension icon click - open side panel
   browser.action.onClicked.addListener(async (tab) => {
     if (tab.id) {
@@ -126,7 +212,7 @@ export default defineBackground(() => {
           }
           
           case 'ANALYZE_TEXT': {
-            const response = await analyzeWithDeepSeek(message.text);
+            const response = await analyzeWithEdgeFunction(message.text);
             sendResponse(response);
             break;
           }
@@ -140,6 +226,107 @@ export default defineBackground(() => {
           case 'CLEAR_HIGHLIGHTS': {
             const response = await sendToContentScript<ClearHighlightsResponse>(message);
             sendResponse(response);
+            break;
+          }
+
+          case 'SIGN_IN_EMAIL': {
+            const response = await handleSignIn(message.email, message.password);
+            sendResponse(response);
+            break;
+          }
+
+          case 'SIGN_OUT': {
+            const response = await handleSignOut();
+            sendResponse(response);
+            break;
+          }
+
+          case 'GET_AUTH_STATE': {
+            const response = await handleGetAuthState();
+            sendResponse(response);
+            break;
+          }
+
+          case 'ADD_FAVORITE': {
+            const user = await getCurrentUser();
+            if (!user) {
+              sendResponse({ success: false, error: '请先登录' } as AddFavoriteResponse);
+              break;
+            }
+            const result = await addFavorite(
+              user.id,
+              message.articleUrl,
+              message.articleTitle,
+              message.favoriteType,
+              message.content
+            );
+            sendResponse(result as AddFavoriteResponse);
+            break;
+          }
+
+          case 'REMOVE_FAVORITE': {
+            const result = await removeFavorite(message.favoriteId);
+            sendResponse(result as RemoveFavoriteResponse);
+            break;
+          }
+
+          case 'CHECK_IS_FAVORITED': {
+            const user = await getCurrentUser();
+            if (!user) {
+              sendResponse({ success: true, isFavorited: false } as CheckIsFavoritedResponse);
+              break;
+            }
+            const result = await checkIsFavorited(
+              user.id,
+              message.articleUrl,
+              message.favoriteType,
+              message.content
+            );
+            sendResponse({ success: true, ...result } as CheckIsFavoritedResponse);
+            break;
+          }
+
+          case 'GET_FAVORITES_BY_ARTICLE': {
+            const user = await getCurrentUser();
+            if (!user) {
+              sendResponse({ success: false, error: '请先登录' } as GetFavoritesByArticleResponse);
+              break;
+            }
+            const data = await getFavoritesByArticle(user.id);
+            sendResponse({ success: true, data } as GetFavoritesByArticleResponse);
+            break;
+          }
+
+          case 'GET_FAVORITES_BY_EXPRESSION': {
+            const user = await getCurrentUser();
+            if (!user) {
+              sendResponse({ success: false, error: '请先登录' } as GetFavoritesByExpressionResponse);
+              break;
+            }
+            const data = await getFavoritesByExpression(user.id);
+            sendResponse({ success: true, data } as GetFavoritesByExpressionResponse);
+            break;
+          }
+
+          case 'SEARCH_FAVORITES': {
+            const user = await getCurrentUser();
+            if (!user) {
+              sendResponse({ success: false, error: '请先登录' } as SearchFavoritesResponse);
+              break;
+            }
+            const data = await searchFavorites(user.id, message.query);
+            sendResponse({ success: true, data } as SearchFavoritesResponse);
+            break;
+          }
+
+          case 'GET_ARTICLE_FAVORITES': {
+            const user = await getCurrentUser();
+            if (!user) {
+              sendResponse({ success: true, favorites: {} } as GetArticleFavoritesResponse);
+              break;
+            }
+            const favorites = await getArticleFavorites(user.id, message.articleUrl);
+            sendResponse({ success: true, favorites } as GetArticleFavoritesResponse);
             break;
           }
           

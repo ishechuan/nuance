@@ -1,15 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Settings, Sparkles, FileText, BookOpen, MessageSquare, Lightbulb } from 'lucide-react';
+import { Settings, Sparkles, FileText, BookOpen, MessageSquare, Lightbulb, Heart } from 'lucide-react';
 import { SettingsPanel } from './components/Settings';
+import { LoginPanel } from './components/LoginPanel';
 import { IdiomCard } from './components/IdiomCard';
 import { SyntaxCard } from './components/SyntaxCard';
 import { VocabularyCard } from './components/VocabularyCard';
-import { hasApiKey } from '@/lib/storage';
-import type { AnalysisResult, IdiomItem, SyntaxItem, VocabularyItem } from '@/lib/storage';
-import type { ExtractContentResponse, AnalyzeTextResponse } from '@/lib/messages';
+import { UsageStatus } from './components/UsageStatus';
+import { Favorites } from './components/Favorites';
+import { useAuthStore } from './store/auth';
+import type { AnalysisResult } from '@/lib/storage';
+import type { ExtractContentResponse, AnalyzeTextResponse, GetArticleFavoritesResponse, ArticleFavoriteInfo } from '@/lib/messages';
 
 type Tab = 'idioms' | 'syntax' | 'vocabulary';
-type View = 'main' | 'settings';
+type View = 'main' | 'settings' | 'favorites';
 
 interface ArticleInfo {
   title: string;
@@ -25,11 +28,58 @@ function App() {
   const [article, setArticle] = useState<ArticleInfo | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [highlightedItem, setHighlightedItem] = useState<string | null>(null);
-  const [hasKey, setHasKey] = useState<boolean | null>(null);
+  
+  // Favorites map: key = "type:expression", value = { favoriteId, type }
+  const [favoritesMap, setFavoritesMap] = useState<Record<string, ArticleFavoriteInfo>>({});
+  
+  // Auth state from Zustand store
+  const {
+    user,
+    isAuthenticated,
+    isPro,
+    usage,
+    isLoading: isAuthLoading,
+    fetchAuthState,
+    updateUsage,
+    clearAuth,
+  } = useAuthStore();
 
-  // Check API key on mount
+  // Check auth state on mount (only once)
   useEffect(() => {
-    hasApiKey().then(setHasKey);
+    fetchAuthState();
+  }, [fetchAuthState]);
+
+  // Handle login success
+  const handleLoginSuccess = useCallback(() => {
+    fetchAuthState();
+  }, [fetchAuthState]);
+
+  // Fetch favorites for an article (batch operation)
+  const fetchArticleFavorites = useCallback(async (articleUrl: string) => {
+    const response: GetArticleFavoritesResponse = await browser.runtime.sendMessage({
+      type: 'GET_ARTICLE_FAVORITES',
+      articleUrl,
+    });
+    if (response.success && response.favorites) {
+      setFavoritesMap(response.favorites);
+    }
+  }, []);
+
+  // Handle favorite added
+  const handleFavoriteAdded = useCallback((key: string, favoriteId: string, type: 'idiom' | 'syntax' | 'vocabulary') => {
+    setFavoritesMap(prev => ({
+      ...prev,
+      [key]: { favoriteId, type },
+    }));
+  }, []);
+
+  // Handle favorite removed
+  const handleFavoriteRemoved = useCallback((key: string) => {
+    setFavoritesMap(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   }, []);
 
   // Extract content from current page
@@ -51,7 +101,7 @@ function App() {
         textContent: response.data.textContent,
       });
       
-      return response.data.textContent;
+      return response.data;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setError(message);
@@ -67,8 +117,8 @@ function App() {
     
     try {
       // First extract content
-      const text = await extractContent();
-      if (!text) {
+      const extractedData = await extractContent();
+      if (!extractedData) {
         setIsLoading(false);
         return;
       }
@@ -76,7 +126,7 @@ function App() {
       // Then analyze
       const response: AnalyzeTextResponse = await browser.runtime.sendMessage({
         type: 'ANALYZE_TEXT',
-        text,
+        text: extractedData.textContent,
       });
       
       if (!response.success || !response.data) {
@@ -84,13 +134,21 @@ function App() {
       }
       
       setAnalysis(response.data);
+      
+      // Update usage info in Zustand store
+      if (response.usage) {
+        updateUsage(response.usage);
+      }
+
+      // Batch fetch favorites for this article
+      await fetchArticleFavorites(extractedData.url);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setError(message);
     } finally {
       setIsLoading(false);
     }
-  }, [extractContent]);
+  }, [extractContent, updateUsage, fetchArticleFavorites]);
 
   // Highlight text in the page
   const handleHighlight = useCallback(async (text: string, itemId: string) => {
@@ -112,28 +170,46 @@ function App() {
     }
   }, [highlightedItem]);
 
-  // Handle settings saved
-  const handleSettingsSaved = useCallback(() => {
-    setHasKey(true);
-    setView('main');
-  }, []);
-
-  // Render settings view
-  if (view === 'settings') {
-    return (
-      <div className="app">
-        <SettingsPanel onBack={() => setView('main')} onSaved={handleSettingsSaved} />
-      </div>
-    );
-  }
-
-  // Render loading state check for API key
-  if (hasKey === null) {
+  // Render loading state for auth check
+  if (isAuthLoading) {
     return (
       <div className="app">
         <div className="loading">
           <div className="spinner" />
         </div>
+      </div>
+    );
+  }
+
+  // Render login panel if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="app">
+        <LoginPanel onLoginSuccess={handleLoginSuccess} />
+      </div>
+    );
+  }
+
+  // Render settings view
+  if (view === 'settings') {
+    return (
+      <div className="app">
+        <SettingsPanel 
+          user={user ? { ...user, isPro } : null} 
+          onBack={() => setView('main')} 
+          onLogout={() => {
+            clearAuth();
+          }}
+        />
+      </div>
+    );
+  }
+
+  // Render favorites view
+  if (view === 'favorites') {
+    return (
+      <div className="app">
+        <Favorites onBack={() => setView('main')} />
       </div>
     );
   }
@@ -150,8 +226,15 @@ function App() {
         <div className="header-actions">
           <button 
             className="icon-btn" 
+            onClick={() => setView('favorites')}
+            title="收藏夹"
+          >
+            <Heart size={18} />
+          </button>
+          <button 
+            className="icon-btn" 
             onClick={() => setView('settings')}
-            title="Settings"
+            title="设置"
           >
             <Settings size={18} />
           </button>
@@ -160,12 +243,8 @@ function App() {
 
       {/* Main Content */}
       <div className="content">
-        {/* API Key Warning */}
-        {!hasKey && (
-          <div className="message error">
-            <span>Please configure your DeepSeek API key in settings first.</span>
-          </div>
-        )}
+        {/* Usage Status */}
+        <UsageStatus usage={usage} />
 
         {/* Action Section */}
         <div className="action-section">
@@ -173,30 +252,30 @@ function App() {
             <div className="article-info">
               <span className="article-title">{article.title}</span>
               <span className="article-meta">
-                {article.textContent.length.toLocaleString()} characters extracted
+                {article.textContent.length.toLocaleString()} 字符已提取
               </span>
             </div>
           ) : (
             <div className="article-info">
-              <span className="article-title">No article loaded</span>
-              <span className="article-meta">Click analyze to extract and analyze the current page</span>
+              <span className="article-title">未加载文章</span>
+              <span className="article-meta">点击分析按钮提取并分析当前页面</span>
             </div>
           )}
           
           <button 
             className="btn-primary"
             onClick={analyzeContent}
-            disabled={isLoading || !hasKey}
+            disabled={isLoading || Boolean(usage && !usage.isPro && usage.limit !== null && usage.used >= usage.limit)}
           >
             {isLoading ? (
               <>
                 <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
-                <span>Analyzing...</span>
+                <span>分析中...</span>
               </>
             ) : (
               <>
                 <FileText size={16} />
-                <span>Analyze Page</span>
+                <span>分析页面</span>
               </>
             )}
           </button>
@@ -218,7 +297,7 @@ function App() {
                 onClick={() => setActiveTab('idioms')}
               >
                 <MessageSquare size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-                Idioms
+                习惯用法
                 <span className="tab-badge">{analysis.idioms.length}</span>
               </button>
               <button 
@@ -226,7 +305,7 @@ function App() {
                 onClick={() => setActiveTab('syntax')}
               >
                 <BookOpen size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-                Syntax
+                语法
                 <span className="tab-badge">{analysis.syntax.length}</span>
               </button>
               <button 
@@ -234,39 +313,69 @@ function App() {
                 onClick={() => setActiveTab('vocabulary')}
               >
                 <Lightbulb size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-                Vocabulary
+                词汇
                 <span className="tab-badge">{analysis.vocabulary.length}</span>
               </button>
             </div>
 
             {/* Tab Content */}
             <div className="card-list mt-4 fade-in">
-              {activeTab === 'idioms' && analysis.idioms.map((item, index) => (
-                <IdiomCard
-                  key={index}
-                  item={item}
-                  isHighlighted={highlightedItem === `idiom-${index}`}
-                  onHighlight={() => handleHighlight(item.example, `idiom-${index}`)}
-                />
-              ))}
+              {activeTab === 'idioms' && analysis.idioms.map((item, index) => {
+                const key = `idiom:${item.expression}`;
+                const favoriteInfo = favoritesMap[key];
+                return (
+                  <IdiomCard
+                    key={index}
+                    item={item}
+                    isHighlighted={highlightedItem === `idiom-${index}`}
+                    onHighlight={() => handleHighlight(item.example, `idiom-${index}`)}
+                    articleUrl={article?.url}
+                    articleTitle={article?.title}
+                    isFavorited={Boolean(favoriteInfo)}
+                    favoriteId={favoriteInfo?.favoriteId}
+                    onFavoriteAdded={(favoriteId) => handleFavoriteAdded(key, favoriteId, 'idiom')}
+                    onFavoriteRemoved={() => handleFavoriteRemoved(key)}
+                  />
+                );
+              })}
               
-              {activeTab === 'syntax' && analysis.syntax.map((item, index) => (
-                <SyntaxCard
-                  key={index}
-                  item={item}
-                  isHighlighted={highlightedItem === `syntax-${index}`}
-                  onHighlight={() => handleHighlight(item.sentence, `syntax-${index}`)}
-                />
-              ))}
+              {activeTab === 'syntax' && analysis.syntax.map((item, index) => {
+                const key = `syntax:${item.sentence}`;
+                const favoriteInfo = favoritesMap[key];
+                return (
+                  <SyntaxCard
+                    key={index}
+                    item={item}
+                    isHighlighted={highlightedItem === `syntax-${index}`}
+                    onHighlight={() => handleHighlight(item.sentence, `syntax-${index}`)}
+                    articleUrl={article?.url}
+                    articleTitle={article?.title}
+                    isFavorited={Boolean(favoriteInfo)}
+                    favoriteId={favoriteInfo?.favoriteId}
+                    onFavoriteAdded={(favoriteId) => handleFavoriteAdded(key, favoriteId, 'syntax')}
+                    onFavoriteRemoved={() => handleFavoriteRemoved(key)}
+                  />
+                );
+              })}
               
-              {activeTab === 'vocabulary' && analysis.vocabulary.map((item, index) => (
-                <VocabularyCard
-                  key={index}
-                  item={item}
-                  isHighlighted={highlightedItem === `vocab-${index}`}
-                  onHighlight={() => handleHighlight(item.context, `vocab-${index}`)}
-                />
-              ))}
+              {activeTab === 'vocabulary' && analysis.vocabulary.map((item, index) => {
+                const key = `vocabulary:${item.word}`;
+                const favoriteInfo = favoritesMap[key];
+                return (
+                  <VocabularyCard
+                    key={index}
+                    item={item}
+                    isHighlighted={highlightedItem === `vocab-${index}`}
+                    onHighlight={() => handleHighlight(item.context, `vocab-${index}`)}
+                    articleUrl={article?.url}
+                    articleTitle={article?.title}
+                    isFavorited={Boolean(favoriteInfo)}
+                    favoriteId={favoriteInfo?.favoriteId}
+                    onFavoriteAdded={(favoriteId) => handleFavoriteAdded(key, favoriteId, 'vocabulary')}
+                    onFavoriteRemoved={() => handleFavoriteRemoved(key)}
+                  />
+                );
+              })}
             </div>
           </>
         )}
@@ -275,9 +384,9 @@ function App() {
         {!analysis && !isLoading && !error && (
           <div className="empty-state">
             <FileText className="empty-state-icon" size={64} />
-            <h3>Ready to Analyze</h3>
+            <h3>准备分析</h3>
             <p>
-              Navigate to an English article and click "Analyze Page" to extract vocabulary, idioms, and syntax patterns.
+              浏览至一篇英文文章，点击"分析页面"提取词汇、习惯用法和语法结构。
             </p>
           </div>
         )}
@@ -286,9 +395,9 @@ function App() {
         {isLoading && (
           <div className="loading fade-in">
             <div className="spinner" />
-            <span className="loading-text">Analyzing with DeepSeek AI...</span>
+            <span className="loading-text">正在使用 DeepSeek AI 分析...</span>
             <span className="loading-text" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              This may take 10-30 seconds
+              大约需要 10-30 秒
             </span>
           </div>
         )}
@@ -298,4 +407,3 @@ function App() {
 }
 
 export default App;
-

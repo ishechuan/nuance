@@ -34,24 +34,8 @@ export interface AnalysisResult {
 
 // Storage keys
 const STORAGE_KEYS = {
-  API_KEY: 'nuance_api_key',
   ANALYSIS_HISTORY: 'nuance_analysis_history',
 } as const;
-
-// API Key functions
-export async function getApiKey(): Promise<string> {
-  const result = await browser.storage.local.get(STORAGE_KEYS.API_KEY);
-  return result[STORAGE_KEYS.API_KEY] || '';
-}
-
-export async function setApiKey(key: string): Promise<void> {
-  await browser.storage.local.set({ [STORAGE_KEYS.API_KEY]: key });
-}
-
-export async function hasApiKey(): Promise<boolean> {
-  const key = await getApiKey();
-  return key.length > 0;
-}
 
 // Analysis history functions
 export async function getAnalysisHistory(): Promise<AnalysisRecord[]> {

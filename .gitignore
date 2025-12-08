@@ -24,3 +24,12 @@ web-ext.config.ts
 *.njsproj
 *.sln
 *.sw?
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Supabase
+supabase/.temp/
+supabase/.branches/
