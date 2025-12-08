@@ -1,0 +1,77 @@
+// Types
+export interface AnalysisRecord {
+  id: string;
+  title: string;
+  url: string;
+  timestamp: number;
+  analysis: AnalysisResult;
+}
+
+export interface IdiomItem {
+  expression: string;
+  meaning: string;
+  example: string;
+}
+
+export interface SyntaxItem {
+  sentence: string;
+  structure: string;
+  explanation: string;
+}
+
+export interface VocabularyItem {
+  word: string;
+  level: 'B1' | 'B2' | 'C1' | 'C2';
+  definition: string;
+  context: string;
+}
+
+export interface AnalysisResult {
+  idioms: IdiomItem[];
+  syntax: SyntaxItem[];
+  vocabulary: VocabularyItem[];
+}
+
+// Storage keys
+const STORAGE_KEYS = {
+  API_KEY: 'nuance_api_key',
+  ANALYSIS_HISTORY: 'nuance_analysis_history',
+} as const;
+
+// API Key functions
+export async function getApiKey(): Promise<string> {
+  const result = await browser.storage.local.get(STORAGE_KEYS.API_KEY);
+  return result[STORAGE_KEYS.API_KEY] || '';
+}
+
+export async function setApiKey(key: string): Promise<void> {
+  await browser.storage.local.set({ [STORAGE_KEYS.API_KEY]: key });
+}
+
+export async function hasApiKey(): Promise<boolean> {
+  const key = await getApiKey();
+  return key.length > 0;
+}
+
+// Analysis history functions
+export async function getAnalysisHistory(): Promise<AnalysisRecord[]> {
+  const result = await browser.storage.local.get(STORAGE_KEYS.ANALYSIS_HISTORY);
+  return result[STORAGE_KEYS.ANALYSIS_HISTORY] || [];
+}
+
+export async function addAnalysisRecord(record: Omit<AnalysisRecord, 'id' | 'timestamp'>): Promise<void> {
+  const history = await getAnalysisHistory();
+  const newRecord: AnalysisRecord = {
+    ...record,
+    id: crypto.randomUUID(),
+    timestamp: Date.now(),
+  };
+  
+  // Keep only last 50 records
+  const updatedHistory = [newRecord, ...history].slice(0, 50);
+  await browser.storage.local.set({ [STORAGE_KEYS.ANALYSIS_HISTORY]: updatedHistory });
+}
+
+export async function clearAnalysisHistory(): Promise<void> {
+  await browser.storage.local.set({ [STORAGE_KEYS.ANALYSIS_HISTORY]: [] });
+}
