@@ -11,6 +11,7 @@ export type MessageType =
   | 'SIGN_IN_EMAIL'
   | 'SIGN_OUT'
   | 'GET_AUTH_STATE'
+  | 'AUTH_STATE_CHANGED'
   | 'ADD_FAVORITE'
   | 'REMOVE_FAVORITE'
   | 'CHECK_IS_FAVORITED'
@@ -107,6 +108,15 @@ export interface GetAuthStateResponse {
     isPro: boolean;
   };
   usage?: UsageInfo;
+}
+
+// Auth state change notification (sent from background to sidepanel)
+export type AuthStateChangeEvent = 'SIGNED_IN' | 'SIGNED_OUT' | 'TOKEN_REFRESHED';
+
+export interface AuthStateChangedMessage {
+  type: 'AUTH_STATE_CHANGED';
+  event: AuthStateChangeEvent;
+  isAuthenticated: boolean;
 }
 
 // Favorites message types
@@ -235,6 +245,7 @@ export type Message =
   | SignInEmailRequest
   | SignOutRequest
   | GetAuthStateRequest
+  | AuthStateChangedMessage
   | AddFavoriteRequest
   | RemoveFavoriteRequest
   | CheckIsFavoritedRequest

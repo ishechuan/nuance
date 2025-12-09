@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { UsageInfo, GetAuthStateResponse } from '@/lib/messages';
+import type { UsageInfo, GetAuthStateResponse, AuthStateChangedMessage } from '@/lib/messages';
 
 export interface UserInfo {
   id: string;
@@ -23,6 +23,11 @@ interface AuthStore {
   clearAuth: () => void;
 }
 
+// Track in-flight fetch to prevent duplicate calls
+let isFetching = false;
+let lastFetchTime = 0;
+const MIN_FETCH_INTERVAL = 1000; // Minimum 1 second between fetches
+
 export const useAuthStore = create<AuthStore>((set) => ({
   // Initial state
   userId: null,
@@ -32,9 +37,26 @@ export const useAuthStore = create<AuthStore>((set) => ({
   usage: null,
   isLoading: true,
 
-  // Fetch auth state from background script (only called once at app mount)
+  // Fetch auth state from background script
   fetchAuthState: async () => {
+    const now = Date.now();
+    
+    // Prevent duplicate calls
+    if (isFetching) {
+      console.log('[AuthStore] Fetch already in progress, skipping');
+      return;
+    }
+    
+    // Prevent rapid successive calls
+    if (now - lastFetchTime < MIN_FETCH_INTERVAL) {
+      console.log('[AuthStore] Fetch called too soon, skipping');
+      return;
+    }
+    
+    isFetching = true;
+    lastFetchTime = now;
     set({ isLoading: true });
+    
     try {
       const response: GetAuthStateResponse = await browser.runtime.sendMessage({
         type: 'GET_AUTH_STATE',
@@ -74,6 +96,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
         usage: null,
         isLoading: false,
       });
+    } finally {
+      isFetching = false;
     }
   },
 
@@ -95,3 +119,26 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 }));
 
+// Setup listener for auth state changes from background script
+// This should be called once when the sidepanel initializes
+export function setupAuthStateListener(): void {
+  browser.runtime.onMessage.addListener((message: { type: string } & Partial<AuthStateChangedMessage>) => {
+    if (message.type === 'AUTH_STATE_CHANGED') {
+      console.log('[AuthStore] Received auth state change:', message.event);
+      
+      const authMessage = message as AuthStateChangedMessage;
+      
+      if (!authMessage.isAuthenticated) {
+        // User signed out or session expired - clear immediately
+        useAuthStore.getState().clearAuth();
+      } else if (authMessage.event === 'SIGNED_IN' || authMessage.event === 'TOKEN_REFRESHED') {
+        // User signed in or token refreshed
+        // fetchAuthState has built-in deduplication, safe to call
+        useAuthStore.getState().fetchAuthState();
+      }
+    }
+    
+    // Return false to not block other listeners
+    return false;
+  });
+}

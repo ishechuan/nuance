@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Mail, Lock, AlertCircle, Loader2, Sparkles } from 'lucide-react';
-import { signInWithEmail } from '@/lib/auth';
+import type { SignInEmailResponse } from '@/lib/messages';
 
 interface LoginPanelProps {
   onLoginSuccess: () => void;
@@ -28,21 +28,26 @@ export function LoginPanel({ onLoginSuccess }: LoginPanelProps) {
     setIsLoading(true);
     setError(null);
 
-    const { session, error: authError } = await signInWithEmail(email.trim(), password);
+    try {
+      // Use message mechanism to communicate with background script
+      const response: SignInEmailResponse = await browser.runtime.sendMessage({
+        type: 'SIGN_IN_EMAIL',
+        email: email.trim(),
+        password,
+      });
 
-    if (authError) {
-      setError(authError.message);
-      setIsLoading(false);
-      return;
-    }
+      if (!response.success) {
+        setError(response.error || '登录失败，请重试');
+        setIsLoading(false);
+        return;
+      }
 
-    if (session) {
       onLoginSuccess();
-    } else {
-      setError('登录失败，请重试');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '登录失败，请重试');
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   return (
