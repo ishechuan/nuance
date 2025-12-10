@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Search, FileText, Tag, Loader2 } from 'lucide-react';
+import { ArrowLeft, Search, FileText, Tag, Loader2, AlertTriangle } from 'lucide-react';
 import { FavoritesByArticle } from './FavoritesByArticle';
 import { FavoritesByExpression } from './FavoritesByExpression';
 import { useAuthStore } from '../store/auth';
@@ -30,6 +30,10 @@ export function Favorites({ onBack }: FavoritesProps) {
   const [articleData, setArticleData] = useState<ArticleWithFavorites[]>([]);
   const [expressionData, setExpressionData] = useState<ExpressionWithArticles[]>([]);
   const [searchResults, setSearchResults] = useState<FavoriteItem[] | null>(null);
+  
+  // Delete confirmation state
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Load data when userId is available
   useEffect(() => {
@@ -90,21 +94,61 @@ export function Favorites({ onBack }: FavoritesProps) {
     }
   }, [userId]);
 
-  // Handle delete
-  const handleDelete = useCallback(async (favoriteId: string) => {
-    const response: RemoveFavoriteResponse = await browser.runtime.sendMessage({
-      type: 'REMOVE_FAVORITE',
-      favoriteId,
-    });
-    if (response.success) {
-      // Reload data
-      loadData();
-      // Clear search results if searching
-      if (searchResults) {
-        setSearchResults(searchResults.filter(item => item.id !== favoriteId));
+  // Request delete (show confirmation dialog)
+  const requestDelete = useCallback((favoriteId: string) => {
+    setPendingDeleteId(favoriteId);
+  }, []);
+
+  // Cancel delete
+  const cancelDelete = useCallback(() => {
+    setPendingDeleteId(null);
+  }, []);
+
+  // Confirm and execute delete
+  const confirmDelete = useCallback(async () => {
+    if (!pendingDeleteId) return;
+    
+    setIsDeleting(true);
+    try {
+      const response: RemoveFavoriteResponse = await browser.runtime.sendMessage({
+        type: 'REMOVE_FAVORITE',
+        favoriteId: pendingDeleteId,
+      });
+      
+      if (response.success) {
+        // Update local state instead of reloading
+        // Update articleData
+        setArticleData(prev => {
+          const updated = prev.map(article => ({
+            ...article,
+            favorites: article.favorites.filter(f => f.id !== pendingDeleteId)
+          }));
+          // Remove articles with no favorites left
+          return updated.filter(article => article.favorites.length > 0);
+        });
+        
+        // Update expressionData
+        setExpressionData(prev => {
+          const updated = prev.map(expr => ({
+            ...expr,
+            articles: expr.articles.filter(a => a.favoriteId !== pendingDeleteId)
+          }));
+          // Remove expressions with no articles left
+          return updated.filter(expr => expr.articles.length > 0);
+        });
+        
+        // Update search results if searching
+        if (searchResults) {
+          setSearchResults(searchResults.filter(item => item.id !== pendingDeleteId));
+        }
       }
+    } catch (err) {
+      console.error('Error deleting favorite:', err);
+    } finally {
+      setIsDeleting(false);
+      setPendingDeleteId(null);
     }
-  }, [searchResults, userId, viewMode]);
+  }, [pendingDeleteId, searchResults]);
 
   // Get total count
   const getTotalCount = () => {
@@ -189,7 +233,7 @@ export function Favorites({ onBack }: FavoritesProps) {
                       <SearchResultCard 
                         key={item.id} 
                         item={item} 
-                        onDelete={() => handleDelete(item.id)}
+                        onDelete={() => requestDelete(item.id)}
                       />
                     ))}
                   </div>
@@ -201,7 +245,7 @@ export function Favorites({ onBack }: FavoritesProps) {
             {!searchQuery && viewMode === 'by-article' && (
               <FavoritesByArticle 
                 articles={articleData} 
-                onDelete={handleDelete}
+                onDelete={requestDelete}
               />
             )}
 
@@ -209,7 +253,7 @@ export function Favorites({ onBack }: FavoritesProps) {
             {!searchQuery && viewMode === 'by-expression' && (
               <FavoritesByExpression 
                 expressions={expressionData} 
-                onDelete={handleDelete}
+                onDelete={requestDelete}
               />
             )}
 
@@ -224,6 +268,40 @@ export function Favorites({ onBack }: FavoritesProps) {
           </>
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      {pendingDeleteId && (
+        <div className="confirm-dialog-overlay" onClick={cancelDelete}>
+          <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-dialog-icon">
+              <AlertTriangle size={24} />
+            </div>
+            <h3 className="confirm-dialog-title">确认删除</h3>
+            <p className="confirm-dialog-message">确定要删除这条收藏吗？此操作无法撤销。</p>
+            <div className="confirm-dialog-actions">
+              <button 
+                className="btn-cancel" 
+                onClick={cancelDelete}
+                disabled={isDeleting}
+              >
+                取消
+              </button>
+              <button 
+                className="btn-confirm-delete" 
+                onClick={confirmDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 size={14} className="spin" />
+                    删除中...
+                  </>
+                ) : '确认删除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

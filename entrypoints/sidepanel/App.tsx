@@ -279,7 +279,13 @@ function App() {
   if (view === 'favorites') {
     return (
       <div className="app">
-        <Favorites onBack={() => setView('main')} />
+        <Favorites onBack={() => {
+          setView('main');
+          // Refresh favorites for current article to sync any deletions
+          if (article?.url) {
+            fetchArticleFavorites(article.url);
+          }
+        }} />
       </div>
     );
   }
