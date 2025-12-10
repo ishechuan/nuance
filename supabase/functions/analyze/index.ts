@@ -147,10 +147,16 @@ Deno.serve(async (req) => {
     }
 
     // Parse request body
-    const { text } = await req.json();
+    const { text, url, title } = await req.json();
     if (!text || typeof text !== 'string') {
       return new Response(
         JSON.stringify({ error: 'Missing or invalid text parameter' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (!url || typeof url !== 'string') {
+      return new Response(
+        JSON.stringify({ error: 'Missing or invalid url parameter' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -226,6 +232,25 @@ Deno.serve(async (req) => {
     await supabase
       .from('usage_logs')
       .insert({ user_id: user.id });
+
+    // Save analysis result to articles table (upsert by user_id + url)
+    const { error: upsertError } = await supabase
+      .from('articles')
+      .upsert(
+        {
+          user_id: user.id,
+          url,
+          title: title || null,
+          analysis,
+          analyzed_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,url' }
+      );
+
+    if (upsertError) {
+      console.error('Failed to cache analysis:', upsertError);
+      // Don't fail the request, just log the error
+    }
 
     // Get updated usage count for response
     const { data: newUsageCount } = await supabase

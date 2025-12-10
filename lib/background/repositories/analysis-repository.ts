@@ -1,5 +1,5 @@
-import { SUPABASE_URL } from '../client/supabase';
-import { getAccessToken } from '../storage/session-storage';
+import { supabase, SUPABASE_URL } from '../client/supabase';
+import { getAccessToken, getUserId } from '../storage/session-storage';
 import { ExternalServiceError, UsageLimitError } from '../errors';
 import type { AnalysisResult } from '@/lib/storage';
 import type { UsageInfo } from '@/lib/messages';
@@ -9,13 +9,19 @@ export interface AnalyzeResponse {
   usage: UsageInfo;
 }
 
+export interface CachedAnalysis {
+  analysis: AnalysisResult;
+  analyzedAt: string;
+  articleTitle: string | null;
+}
+
 /**
  * Call Supabase Edge Function for text analysis
  * Throws typed errors for different failure scenarios
  * 
  * Note: Authentication is already verified by auth-middleware before this is called
  */
-export async function analyze(text: string): Promise<AnalyzeResponse> {
+export async function analyze(text: string, url: string, title: string): Promise<AnalyzeResponse> {
   // Access token is guaranteed to exist by auth-middleware
   const accessToken = (await getAccessToken())!;
   
@@ -25,7 +31,7 @@ export async function analyze(text: string): Promise<AnalyzeResponse> {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, url, title }),
   });
   
   const data = await response.json();
@@ -38,5 +44,33 @@ export async function analyze(text: string): Promise<AnalyzeResponse> {
   }
   
   return { data: data.data, usage: data.usage };
+}
+
+/**
+ * Get cached analysis result for a URL
+ * Returns null if no cached analysis exists
+ */
+export async function getCachedAnalysis(url: string): Promise<CachedAnalysis | null> {
+  const userId = await getUserId();
+  if (!userId) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('articles')
+    .select('analysis, analyzed_at, title')
+    .eq('user_id', userId)
+    .eq('url', url)
+    .single();
+
+  if (error || !data || !data.analysis) {
+    return null;
+  }
+
+  return {
+    analysis: data.analysis as AnalysisResult,
+    analyzedAt: data.analyzed_at,
+    articleTitle: data.title,
+  };
 }
 

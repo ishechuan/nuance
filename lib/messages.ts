@@ -6,6 +6,7 @@ export type FavoriteType = 'idiom' | 'syntax' | 'vocabulary';
 export type MessageType = 
   | 'EXTRACT_CONTENT'
   | 'ANALYZE_TEXT'
+  | 'GET_CACHED_ANALYSIS'
   | 'HIGHLIGHT_TEXT'
   | 'CLEAR_HIGHLIGHTS'
   | 'SIGN_IN_EMAIL'
@@ -38,6 +39,8 @@ export interface ExtractContentResponse {
 export interface AnalyzeTextRequest {
   type: 'ANALYZE_TEXT';
   text: string;
+  url: string;
+  title: string;
 }
 
 export interface UsageInfo {
@@ -52,6 +55,20 @@ export interface AnalyzeTextResponse {
   usage?: UsageInfo;
   error?: string;
   code?: string;
+}
+
+export interface GetCachedAnalysisRequest {
+  type: 'GET_CACHED_ANALYSIS';
+  url: string;
+}
+
+export interface GetCachedAnalysisResponse {
+  success: boolean;
+  hasCached: boolean;
+  data?: AnalysisResult;
+  analyzedAt?: string;
+  articleTitle?: string | null;
+  error?: string;
 }
 
 export interface HighlightTextRequest {
@@ -240,6 +257,7 @@ export interface GetArticleFavoritesResponse {
 export type Message = 
   | ExtractContentRequest 
   | AnalyzeTextRequest 
+  | GetCachedAnalysisRequest
   | HighlightTextRequest 
   | ClearHighlightsRequest
   | SignInEmailRequest
@@ -257,6 +275,7 @@ export type Message =
 export type MessageResponse = 
   | ExtractContentResponse 
   | AnalyzeTextResponse 
+  | GetCachedAnalysisResponse
   | HighlightTextResponse 
   | ClearHighlightsResponse
   | SignInEmailResponse

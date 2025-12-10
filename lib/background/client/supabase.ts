@@ -26,6 +26,8 @@ export interface Article {
   user_id: string;
   url: string;
   title: string | null;
+  analysis: Record<string, unknown> | null;
+  analyzed_at: string | null;
   created_at: string;
 }
 

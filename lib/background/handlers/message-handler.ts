@@ -75,9 +75,13 @@ export async function handleMessage(message: Message): Promise<MessageResponse> 
         return await authService.handleGetAuthState();
       }
 
-      // Analysis operation (requires auth)
+      // Analysis operations (require auth)
       case 'ANALYZE_TEXT': {
-        return await analysisService.analyzeText(message.text);
+        return await analysisService.analyzeText(message.text, message.url, message.title);
+      }
+
+      case 'GET_CACHED_ANALYSIS': {
+        return await analysisService.getCachedAnalysis(message.url);
       }
 
       // Favorites operations (all require auth, userId guaranteed non-null by middleware)

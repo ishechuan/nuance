@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Settings, Sparkles, FileText, BookOpen, MessageSquare, Lightbulb, Heart } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Settings, Sparkles, FileText, BookOpen, MessageSquare, Lightbulb, Heart, RefreshCw } from 'lucide-react';
 import { SettingsPanel } from './components/Settings';
 import { LoginPanel } from './components/LoginPanel';
 import { IdiomCard } from './components/IdiomCard';
@@ -9,7 +9,7 @@ import { UsageStatus } from './components/UsageStatus';
 import { Favorites } from './components/Favorites';
 import { useAuthStore } from './store/auth';
 import type { AnalysisResult } from '@/lib/storage';
-import type { ExtractContentResponse, AnalyzeTextResponse, GetArticleFavoritesResponse, ArticleFavoriteInfo } from '@/lib/messages';
+import type { ExtractContentResponse, AnalyzeTextResponse, GetArticleFavoritesResponse, GetCachedAnalysisResponse, ArticleFavoriteInfo } from '@/lib/messages';
 
 type Tab = 'idioms' | 'syntax' | 'vocabulary';
 type View = 'main' | 'settings' | 'favorites';
@@ -24,10 +24,16 @@ function App() {
   const [view, setView] = useState<View>('main');
   const [activeTab, setActiveTab] = useState<Tab>('idioms');
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingCache, setIsCheckingCache] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [article, setArticle] = useState<ArticleInfo | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [isCachedResult, setIsCachedResult] = useState(false);
+  const [analyzedAt, setAnalyzedAt] = useState<string | null>(null);
   const [highlightedItem, setHighlightedItem] = useState<string | null>(null);
+  
+  // Track the current URL to detect page changes
+  const lastCheckedUrlRef = useRef<string | null>(null);
   
   // Favorites map: key = "type:expression", value = { favoriteId, type }
   const [favoritesMap, setFavoritesMap] = useState<Record<string, ArticleFavoriteInfo>>({});
@@ -64,6 +70,66 @@ function App() {
       setFavoritesMap(response.favorites);
     }
   }, []);
+
+  // Check for cached analysis when authenticated
+  const checkCachedAnalysis = useCallback(async () => {
+    if (!isAuthenticated) return;
+    
+    setIsCheckingCache(true);
+    setError(null);
+    
+    try {
+      // First extract content to get the current URL
+      const extractResponse: ExtractContentResponse = await browser.runtime.sendMessage({
+        type: 'EXTRACT_CONTENT',
+      });
+      
+      if (!extractResponse.success || !extractResponse.data) {
+        setIsCheckingCache(false);
+        return;
+      }
+      
+      const { url, title, textContent } = extractResponse.data;
+      
+      // Skip if we already checked this URL
+      if (lastCheckedUrlRef.current === url) {
+        setIsCheckingCache(false);
+        return;
+      }
+      
+      lastCheckedUrlRef.current = url;
+      
+      // Set article info
+      setArticle({ title, url, textContent });
+      
+      // Check for cached analysis
+      const cacheResponse: GetCachedAnalysisResponse = await browser.runtime.sendMessage({
+        type: 'GET_CACHED_ANALYSIS',
+        url,
+      });
+      
+      if (cacheResponse.success && cacheResponse.hasCached && cacheResponse.data) {
+        setAnalysis(cacheResponse.data);
+        setIsCachedResult(true);
+        setAnalyzedAt(cacheResponse.analyzedAt || null);
+        
+        // Fetch favorites for this article
+        await fetchArticleFavorites(url);
+      }
+    } catch (err) {
+      // Silently ignore errors when checking cache
+      console.error('Failed to check cached analysis:', err);
+    } finally {
+      setIsCheckingCache(false);
+    }
+  }, [isAuthenticated, fetchArticleFavorites]);
+
+  // Check for cached analysis when user becomes authenticated
+  useEffect(() => {
+    if (isAuthenticated && !isAuthLoading) {
+      checkCachedAnalysis();
+    }
+  }, [isAuthenticated, isAuthLoading, checkCachedAnalysis]);
 
   // Handle favorite added
   const handleFavoriteAdded = useCallback((key: string, favoriteId: string, type: 'idiom' | 'syntax' | 'vocabulary') => {
@@ -114,6 +180,8 @@ function App() {
     setIsLoading(true);
     setError(null);
     setAnalysis(null);
+    setIsCachedResult(false);
+    setAnalyzedAt(null);
     
     try {
       // First extract content
@@ -123,10 +191,12 @@ function App() {
         return;
       }
       
-      // Then analyze
+      // Then analyze (pass url and title for caching)
       const response: AnalyzeTextResponse = await browser.runtime.sendMessage({
         type: 'ANALYZE_TEXT',
         text: extractedData.textContent,
+        url: extractedData.url,
+        title: extractedData.title,
       });
       
       if (!response.success || !response.data) {
@@ -253,24 +323,34 @@ function App() {
               <span className="article-title">{article.title}</span>
               <span className="article-meta">
                 {article.textContent.length.toLocaleString()} 字符已提取
+                {isCachedResult && analyzedAt && (
+                  <> · 分析于 {new Date(analyzedAt).toLocaleDateString('zh-CN')}</>
+                )}
               </span>
             </div>
           ) : (
             <div className="article-info">
-              <span className="article-title">未加载文章</span>
-              <span className="article-meta">点击分析按钮提取并分析当前页面</span>
+              <span className="article-title">{isCheckingCache ? '正在检查...' : '未加载文章'}</span>
+              <span className="article-meta">
+                {isCheckingCache ? '正在检查是否有已分析的结果' : '点击分析按钮提取并分析当前页面'}
+              </span>
             </div>
           )}
           
           <button 
             className="btn-primary"
             onClick={analyzeContent}
-            disabled={isLoading || Boolean(usage && !usage.isPro && usage.limit !== null && usage.used >= usage.limit)}
+            disabled={isLoading || isCheckingCache || Boolean(usage && !usage.isPro && usage.limit !== null && usage.used >= usage.limit)}
           >
             {isLoading ? (
               <>
                 <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
                 <span>分析中...</span>
+              </>
+            ) : isCachedResult ? (
+              <>
+                <RefreshCw size={16} />
+                <span>重新分析</span>
               </>
             ) : (
               <>
@@ -381,13 +461,21 @@ function App() {
         )}
 
         {/* Empty State */}
-        {!analysis && !isLoading && !error && (
+        {!analysis && !isLoading && !isCheckingCache && !error && (
           <div className="empty-state">
             <FileText className="empty-state-icon" size={64} />
             <h3>准备分析</h3>
             <p>
               浏览至一篇英文文章，点击"分析页面"提取词汇、习惯用法和语法结构。
             </p>
+          </div>
+        )}
+
+        {/* Checking Cache State */}
+        {isCheckingCache && (
+          <div className="loading fade-in">
+            <div className="spinner" />
+            <span className="loading-text">正在检查历史分析结果...</span>
           </div>
         )}
 
