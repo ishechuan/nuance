@@ -2,7 +2,7 @@ import { supabase, SUPABASE_URL } from '../client/supabase';
 import { getAccessToken, getUserId } from '../storage/session-storage';
 import { ExternalServiceError, UsageLimitError } from '../errors';
 import type { AnalysisResult } from '@/lib/storage';
-import type { UsageInfo } from '@/lib/messages';
+import type { UsageInfo, FavoriteType } from '@/lib/messages';
 
 export interface AnalyzeResponse {
   data: AnalysisResult;
@@ -72,5 +72,46 @@ export async function getCachedAnalysis(url: string): Promise<CachedAnalysis | n
     analyzedAt: data.analyzed_at,
     articleTitle: data.title,
   };
+}
+
+export interface GeneratedFields {
+  // For idiom
+  meaning?: string;
+  example?: string;
+  // For syntax
+  structure?: string;
+  explanation?: string;
+  // For vocabulary
+  level?: 'B1' | 'B2' | 'C1' | 'C2';
+  definition?: string;
+  context?: string;
+}
+
+/**
+ * Call Supabase Edge Function to generate entry fields using AI
+ */
+export async function generateFields(
+  entryType: FavoriteType,
+  primaryValue: string,
+  context?: string
+): Promise<GeneratedFields> {
+  const accessToken = (await getAccessToken())!;
+  
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-fields`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ entryType, primaryValue, context }),
+  });
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new ExternalServiceError(data.error || `生成失败: ${response.status}`);
+  }
+  
+  return data.data as GeneratedFields;
 }
 

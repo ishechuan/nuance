@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Settings, Sparkles, FileText, BookOpen, MessageSquare, Lightbulb, Heart, RefreshCw } from 'lucide-react';
+import { Settings, Sparkles, FileText, BookOpen, MessageSquare, Lightbulb, Heart, RefreshCw, ChevronDown, ChevronUp, PenLine } from 'lucide-react';
 import { SettingsPanel } from './components/Settings';
 import { LoginPanel } from './components/LoginPanel';
 import { IdiomCard } from './components/IdiomCard';
@@ -7,12 +7,23 @@ import { SyntaxCard } from './components/SyntaxCard';
 import { VocabularyCard } from './components/VocabularyCard';
 import { UsageStatus } from './components/UsageStatus';
 import { Favorites } from './components/Favorites';
+import { AddEntryForm } from './components/AddEntryForm';
 import { useAuthStore } from './store/auth';
 import type { AnalysisResult } from '@/lib/storage';
-import type { ExtractContentResponse, AnalyzeTextResponse, GetArticleFavoritesResponse, GetCachedAnalysisResponse, ArticleFavoriteInfo } from '@/lib/messages';
+import type { ExtractContentResponse, AnalyzeTextResponse, GetArticleFavoritesResponse, GetCachedAnalysisResponse, ArticleFavoriteInfo, GetManualEntriesResponse, ManualEntriesData } from '@/lib/messages';
 
 type Tab = 'idioms' | 'syntax' | 'vocabulary';
-type View = 'main' | 'settings' | 'favorites';
+type View = 'main' | 'settings' | 'favorites' | 'adding';
+
+// Storage key for pending custom entry data (must match background.ts)
+const PENDING_ENTRY_KEY = 'nuance_pending_entry';
+
+interface PendingEntryData {
+  selectedText: string;
+  url: string;
+  title: string;
+  timestamp: number;
+}
 
 interface ArticleInfo {
   title: string;
@@ -32,11 +43,18 @@ function App() {
   const [analyzedAt, setAnalyzedAt] = useState<string | null>(null);
   const [highlightedItem, setHighlightedItem] = useState<string | null>(null);
   
+  // Pending entry data from context menu
+  const [pendingEntry, setPendingEntry] = useState<PendingEntryData | null>(null);
+  
   // Track the current URL to detect page changes
   const lastCheckedUrlRef = useRef<string | null>(null);
   
   // Favorites map: key = "type:expression", value = { favoriteId, type }
   const [favoritesMap, setFavoritesMap] = useState<Record<string, ArticleFavoriteInfo>>({});
+  
+  // Manual entries for the current article
+  const [manualEntries, setManualEntries] = useState<ManualEntriesData | null>(null);
+  const [isManualSectionExpanded, setIsManualSectionExpanded] = useState(true);
   
   // Auth state from Zustand store
   const {
@@ -55,6 +73,43 @@ function App() {
     fetchAuthState();
   }, [fetchAuthState]);
 
+  // Check for pending entry data from context menu
+  useEffect(() => {
+    const checkPendingEntry = async () => {
+      const result = await browser.storage.local.get(PENDING_ENTRY_KEY);
+      const entry = result[PENDING_ENTRY_KEY] as PendingEntryData | undefined;
+      
+      if (entry && entry.timestamp) {
+        // Only show if entry is recent (within last 30 seconds)
+        const isRecent = Date.now() - entry.timestamp < 30000;
+        if (isRecent) {
+          setPendingEntry(entry);
+          setView('adding');
+          // Clear the pending entry from storage
+          await browser.storage.local.remove(PENDING_ENTRY_KEY);
+        }
+      }
+    };
+
+    checkPendingEntry();
+
+    // Listen for storage changes (in case panel is already open)
+    const handleStorageChange = (changes: Record<string, { oldValue?: unknown; newValue?: unknown }>) => {
+      if (changes[PENDING_ENTRY_KEY]?.newValue) {
+        const entry = changes[PENDING_ENTRY_KEY].newValue as PendingEntryData;
+        setPendingEntry(entry);
+        setView('adding');
+        // Clear from storage
+        browser.storage.local.remove(PENDING_ENTRY_KEY);
+      }
+    };
+
+    browser.storage.local.onChanged.addListener(handleStorageChange);
+    return () => {
+      browser.storage.local.onChanged.removeListener(handleStorageChange);
+    };
+  }, []);
+
   // Handle login success
   const handleLoginSuccess = useCallback(() => {
     fetchAuthState();
@@ -68,6 +123,17 @@ function App() {
     });
     if (response.success && response.favorites) {
       setFavoritesMap(response.favorites);
+    }
+  }, []);
+
+  // Fetch manual entries for an article
+  const fetchManualEntries = useCallback(async (articleUrl: string) => {
+    const response: GetManualEntriesResponse = await browser.runtime.sendMessage({
+      type: 'GET_MANUAL_ENTRIES',
+      articleUrl,
+    });
+    if (response.success && response.data) {
+      setManualEntries(response.data);
     }
   }, []);
 
@@ -116,13 +182,16 @@ function App() {
         // Fetch favorites for this article
         await fetchArticleFavorites(url);
       }
+      
+      // Always fetch manual entries for this article
+      await fetchManualEntries(url);
     } catch (err) {
       // Silently ignore errors when checking cache
       console.error('Failed to check cached analysis:', err);
     } finally {
       setIsCheckingCache(false);
     }
-  }, [isAuthenticated, fetchArticleFavorites]);
+  }, [isAuthenticated, fetchArticleFavorites, fetchManualEntries]);
 
   // Check for cached analysis when user becomes authenticated
   useEffect(() => {
@@ -212,13 +281,16 @@ function App() {
 
       // Batch fetch favorites for this article
       await fetchArticleFavorites(extractedData.url);
+      
+      // Also fetch manual entries
+      await fetchManualEntries(extractedData.url);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setError(message);
     } finally {
       setIsLoading(false);
     }
-  }, [extractContent, updateUsage, fetchArticleFavorites]);
+  }, [extractContent, updateUsage, fetchArticleFavorites, fetchManualEntries]);
 
   // Highlight text in the page
   const handleHighlight = useCallback(async (text: string, itemId: string) => {
@@ -286,6 +358,30 @@ function App() {
             fetchArticleFavorites(article.url);
           }
         }} />
+      </div>
+    );
+  }
+
+  // Render add entry view
+  if (view === 'adding' && pendingEntry) {
+    return (
+      <div className="app">
+        <AddEntryForm
+          pendingEntry={pendingEntry}
+          onBack={() => {
+            setPendingEntry(null);
+            setView('main');
+          }}
+          onSaved={() => {
+            setPendingEntry(null);
+            setView('main');
+            // Refresh favorites and manual entries if we're on the same article
+            if (article?.url === pendingEntry.url) {
+              fetchArticleFavorites(article.url);
+              fetchManualEntries(article.url);
+            }
+          }}
+        />
       </div>
     );
   }
@@ -464,6 +560,116 @@ function App() {
               })}
             </div>
           </>
+        )}
+
+        {/* Manual Entries Section */}
+        {manualEntries && (manualEntries.idioms.length > 0 || manualEntries.syntax.length > 0 || manualEntries.vocabulary.length > 0) && (
+          <div className="manual-entries-section fade-in">
+            <button 
+              className="manual-entries-header"
+              onClick={() => setIsManualSectionExpanded(!isManualSectionExpanded)}
+            >
+              <div className="manual-entries-title">
+                <PenLine size={16} />
+                <span>手动添加</span>
+                <span className="manual-entries-count">
+                  {manualEntries.idioms.length + manualEntries.syntax.length + manualEntries.vocabulary.length}
+                </span>
+              </div>
+              {isManualSectionExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </button>
+            
+            {isManualSectionExpanded && (
+              <div className="manual-entries-content">
+                {manualEntries.idioms.length > 0 && (
+                  <div className="manual-type-group">
+                    <div className="manual-type-label">
+                      <MessageSquare size={14} />
+                      <span>习惯用法</span>
+                    </div>
+                    <div className="card-list">
+                      {manualEntries.idioms.map((item, index) => {
+                        const key = `idiom:${item.expression}`;
+                        const favoriteInfo = favoritesMap[key];
+                        return (
+                          <IdiomCard
+                            key={`manual-idiom-${index}`}
+                            item={item}
+                            isHighlighted={highlightedItem === `manual-idiom-${index}`}
+                            onHighlight={() => handleHighlight(item.example, `manual-idiom-${index}`)}
+                            articleUrl={article?.url}
+                            articleTitle={article?.title}
+                            isFavorited={Boolean(favoriteInfo)}
+                            favoriteId={favoriteInfo?.favoriteId}
+                            onFavoriteAdded={(favoriteId) => handleFavoriteAdded(key, favoriteId, 'idiom')}
+                            onFavoriteRemoved={() => handleFavoriteRemoved(key)}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                
+                {manualEntries.syntax.length > 0 && (
+                  <div className="manual-type-group">
+                    <div className="manual-type-label">
+                      <BookOpen size={14} />
+                      <span>语法</span>
+                    </div>
+                    <div className="card-list">
+                      {manualEntries.syntax.map((item, index) => {
+                        const key = `syntax:${item.sentence}`;
+                        const favoriteInfo = favoritesMap[key];
+                        return (
+                          <SyntaxCard
+                            key={`manual-syntax-${index}`}
+                            item={item}
+                            isHighlighted={highlightedItem === `manual-syntax-${index}`}
+                            onHighlight={() => handleHighlight(item.sentence, `manual-syntax-${index}`)}
+                            articleUrl={article?.url}
+                            articleTitle={article?.title}
+                            isFavorited={Boolean(favoriteInfo)}
+                            favoriteId={favoriteInfo?.favoriteId}
+                            onFavoriteAdded={(favoriteId) => handleFavoriteAdded(key, favoriteId, 'syntax')}
+                            onFavoriteRemoved={() => handleFavoriteRemoved(key)}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                
+                {manualEntries.vocabulary.length > 0 && (
+                  <div className="manual-type-group">
+                    <div className="manual-type-label">
+                      <Lightbulb size={14} />
+                      <span>词汇</span>
+                    </div>
+                    <div className="card-list">
+                      {manualEntries.vocabulary.map((item, index) => {
+                        const key = `vocabulary:${item.word}`;
+                        const favoriteInfo = favoritesMap[key];
+                        return (
+                          <VocabularyCard
+                            key={`manual-vocab-${index}`}
+                            item={item}
+                            isHighlighted={highlightedItem === `manual-vocab-${index}`}
+                            onHighlight={() => handleHighlight(item.context, `manual-vocab-${index}`)}
+                            articleUrl={article?.url}
+                            articleTitle={article?.title}
+                            isFavorited={Boolean(favoriteInfo)}
+                            favoriteId={favoriteInfo?.favoriteId}
+                            onFavoriteAdded={(favoriteId) => handleFavoriteAdded(key, favoriteId, 'vocabulary')}
+                            onFavoriteRemoved={() => handleFavoriteRemoved(key)}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Empty State */}

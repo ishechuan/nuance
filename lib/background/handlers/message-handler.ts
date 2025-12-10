@@ -10,6 +10,7 @@ import type {
   ExtractContentResponse,
   HighlightTextResponse,
   ClearHighlightsResponse,
+  FavoriteType,
 } from '@/lib/messages';
 
 /**
@@ -122,6 +123,18 @@ export async function handleMessage(message: Message): Promise<MessageResponse> 
 
       case 'GET_ARTICLE_FAVORITES': {
         return await favoriteService.getArticleFavorites(userId!, message.articleUrl);
+      }
+
+      case 'GENERATE_ENTRY_FIELDS': {
+        return await analysisService.generateEntryFields(
+          message.entryType as FavoriteType,
+          message.primaryValue,
+          message.context
+        );
+      }
+
+      case 'GET_MANUAL_ENTRIES': {
+        return await favoriteService.getManualEntries(userId!, message.articleUrl);
       }
 
       default:

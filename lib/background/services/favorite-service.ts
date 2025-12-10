@@ -14,7 +14,9 @@ import type {
   GetFavoritesByExpressionResponse,
   SearchFavoritesResponse,
   GetArticleFavoritesResponse,
+  GetManualEntriesResponse,
 } from '@/lib/messages';
+import type { IdiomItem, SyntaxItem, VocabularyItem } from '@/lib/storage';
 
 /**
  * Get or create an article, returns article ID
@@ -206,5 +208,57 @@ export async function getArticleFavorites(
   }
   
   return { success: true, favorites: result };
+}
+
+/**
+ * Get manual entries for a specific article
+ * Filters favorites where content.isManual === true
+ */
+export async function getManualEntries(
+  userId: string,
+  articleUrl: string
+): Promise<GetManualEntriesResponse> {
+  const article = await articleRepo.findByUrl(userId, articleUrl);
+  if (!article) {
+    return { 
+      success: true, 
+      data: { idioms: [], syntax: [], vocabulary: [] } 
+    };
+  }
+  
+  const favorites = await favoriteRepo.findByArticle(userId, article.id);
+  
+  // Filter and group manual entries
+  const idioms: IdiomItem[] = [];
+  const syntax: SyntaxItem[] = [];
+  const vocabulary: VocabularyItem[] = [];
+  
+  for (const fav of favorites) {
+    const content = fav.content as FavoriteContent;
+    
+    // Check if this is a manual entry
+    if (!('isManual' in content) || !content.isManual) {
+      continue;
+    }
+    
+    const type = fav.type as FavoriteType;
+    
+    switch (type) {
+      case 'idiom':
+        idioms.push(content as IdiomItem);
+        break;
+      case 'syntax':
+        syntax.push(content as SyntaxItem);
+        break;
+      case 'vocabulary':
+        vocabulary.push(content as VocabularyItem);
+        break;
+    }
+  }
+  
+  return { 
+    success: true, 
+    data: { idioms, syntax, vocabulary } 
+  };
 }
 

@@ -6,7 +6,7 @@ export default defineConfig({
   manifest: {
     name: 'Nuance',
     description: 'AI-powered English learning assistant - Extract, Analyze, Master',
-    permissions: ['storage', 'activeTab', 'sidePanel'],
+    permissions: ['storage', 'activeTab', 'sidePanel', 'contextMenus'],
     side_panel: {
       default_path: 'sidepanel.html',
     },

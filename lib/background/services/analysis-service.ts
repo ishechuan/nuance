@@ -1,5 +1,5 @@
 import * as analysisRepo from '../repositories/analysis-repository';
-import type { AnalyzeTextResponse, GetCachedAnalysisResponse } from '@/lib/messages';
+import type { AnalyzeTextResponse, GetCachedAnalysisResponse, GenerateEntryFieldsResponse, FavoriteType } from '@/lib/messages';
 
 /**
  * Analyze text using AI
@@ -31,5 +31,20 @@ export async function getCachedAnalysis(url: string): Promise<GetCachedAnalysisR
     data: cached.analysis,
     analyzedAt: cached.analyzedAt,
     articleTitle: cached.articleTitle,
+  };
+}
+
+/**
+ * Generate entry fields using AI
+ */
+export async function generateEntryFields(
+  entryType: FavoriteType,
+  primaryValue: string,
+  context?: string
+): Promise<GenerateEntryFieldsResponse> {
+  const result = await analysisRepo.generateFields(entryType, primaryValue, context);
+  return {
+    success: true,
+    data: result,
   };
 }

@@ -19,7 +19,9 @@ export type MessageType =
   | 'GET_FAVORITES_BY_ARTICLE'
   | 'GET_FAVORITES_BY_EXPRESSION'
   | 'SEARCH_FAVORITES'
-  | 'GET_ARTICLE_FAVORITES';
+  | 'GET_ARTICLE_FAVORITES'
+  | 'GENERATE_ENTRY_FIELDS'
+  | 'GET_MANUAL_ENTRIES';
 
 export interface ExtractContentRequest {
   type: 'EXTRACT_CONTENT';
@@ -254,6 +256,51 @@ export interface GetArticleFavoritesResponse {
   error?: string;
 }
 
+// Generate entry fields using AI
+export interface GenerateEntryFieldsRequest {
+  type: 'GENERATE_ENTRY_FIELDS';
+  entryType: FavoriteType;
+  // The primary field value (expression for idiom, sentence for syntax, word for vocabulary)
+  primaryValue: string;
+  // Optional context from the page
+  context?: string;
+}
+
+export interface GenerateEntryFieldsResponse {
+  success: boolean;
+  data?: {
+    // For idiom
+    meaning?: string;
+    example?: string;
+    // For syntax
+    structure?: string;
+    explanation?: string;
+    // For vocabulary
+    level?: 'B1' | 'B2' | 'C1' | 'C2';
+    definition?: string;
+    context?: string;
+  };
+  error?: string;
+}
+
+// Get manual entries for an article
+export interface GetManualEntriesRequest {
+  type: 'GET_MANUAL_ENTRIES';
+  articleUrl: string;
+}
+
+export interface ManualEntriesData {
+  idioms: IdiomItem[];
+  syntax: SyntaxItem[];
+  vocabulary: VocabularyItem[];
+}
+
+export interface GetManualEntriesResponse {
+  success: boolean;
+  data?: ManualEntriesData;
+  error?: string;
+}
+
 export type Message = 
   | ExtractContentRequest 
   | AnalyzeTextRequest 
@@ -270,7 +317,9 @@ export type Message =
   | GetFavoritesByArticleRequest
   | GetFavoritesByExpressionRequest
   | SearchFavoritesRequest
-  | GetArticleFavoritesRequest;
+  | GetArticleFavoritesRequest
+  | GenerateEntryFieldsRequest
+  | GetManualEntriesRequest;
 
 export type MessageResponse = 
   | ExtractContentResponse 
@@ -287,4 +336,6 @@ export type MessageResponse =
   | GetFavoritesByArticleResponse
   | GetFavoritesByExpressionResponse
   | SearchFavoritesResponse
-  | GetArticleFavoritesResponse;
+  | GetArticleFavoritesResponse
+  | GenerateEntryFieldsResponse
+  | GetManualEntriesResponse;
