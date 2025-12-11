@@ -8,12 +8,14 @@ import { VocabularyCard } from './components/VocabularyCard';
 import { UsageStatus } from './components/UsageStatus';
 import { Favorites } from './components/Favorites';
 import { AddEntryForm } from './components/AddEntryForm';
+import { SentencePractice } from './components/SentencePractice';
 import { useAuthStore } from './store/auth';
+import { useSentencePracticeStore } from './store/sentencePractice';
 import type { AnalysisResult } from '@/lib/storage';
-import type { ExtractContentResponse, AnalyzeTextResponse, GetArticleFavoritesResponse, GetCachedAnalysisResponse, ArticleFavoriteInfo, GetManualEntriesResponse, ManualEntriesData } from '@/lib/messages';
+import type { ExtractContentResponse, AnalyzeTextResponse, GetArticleFavoritesResponse, GetCachedAnalysisResponse, ArticleFavoriteInfo, GetManualEntriesResponse, ManualEntriesData, FavoriteType } from '@/lib/messages';
 
 type Tab = 'idioms' | 'syntax' | 'vocabulary';
-type View = 'main' | 'settings' | 'favorites' | 'adding';
+type View = 'main' | 'settings' | 'favorites' | 'adding' | 'practice';
 
 // Storage key for pending custom entry data (must match background.ts)
 const PENDING_ENTRY_KEY = 'nuance_pending_entry';
@@ -55,6 +57,9 @@ function App() {
   // Manual entries for the current article
   const [manualEntries, setManualEntries] = useState<ManualEntriesData | null>(null);
   const [isManualSectionExpanded, setIsManualSectionExpanded] = useState(true);
+
+  // Sentence practice store
+  const { isActive: isPracticeActive, startPractice } = useSentencePracticeStore();
   
   // Auth state from Zustand store
   const {
@@ -312,6 +317,12 @@ function App() {
     }
   }, [highlightedItem]);
 
+  // Start sentence practice
+  const handleStartPractice = useCallback((expression: string, meaning: string, type: FavoriteType = 'idiom') => {
+    startPractice(expression, meaning, type);
+    setView('practice');
+  }, [startPractice]);
+
   // Render loading state for auth check
   if (isAuthLoading) {
     return (
@@ -382,6 +393,15 @@ function App() {
             }
           }}
         />
+      </div>
+    );
+  }
+
+  // Render sentence practice view
+  if (view === 'practice' || isPracticeActive) {
+    return (
+      <div className="app">
+        <SentencePractice onBack={() => setView('main')} />
       </div>
     );
   }
@@ -517,6 +537,7 @@ function App() {
                     favoriteId={favoriteInfo?.favoriteId}
                     onFavoriteAdded={(favoriteId) => handleFavoriteAdded(key, favoriteId, 'idiom')}
                     onFavoriteRemoved={() => handleFavoriteRemoved(key)}
+                    onPractice={(expr, meaning) => handleStartPractice(expr, meaning, 'idiom')}
                   />
                 );
               })}
@@ -603,6 +624,7 @@ function App() {
                             favoriteId={favoriteInfo?.favoriteId}
                             onFavoriteAdded={(favoriteId) => handleFavoriteAdded(key, favoriteId, 'idiom')}
                             onFavoriteRemoved={() => handleFavoriteRemoved(key)}
+                            onPractice={(expr, meaning) => handleStartPractice(expr, meaning, 'idiom')}
                           />
                         );
                       })}

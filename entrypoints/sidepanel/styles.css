@@ -1768,3 +1768,30 @@ body {
   padding-bottom: 0;
 }
 
+
+
+/* ==================== PRACTICE BUTTON ==================== */
+.practice-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-md);
+  color: var(--accent-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.practice-btn:hover {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.practice-btn:active {
+  transform: scale(0.98);
+}

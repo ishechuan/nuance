@@ -3,6 +3,7 @@ import { AppError, AuthError, UsageLimitError, ExternalServiceError } from '../e
 import * as authService from '../services/auth-service';
 import * as analysisService from '../services/analysis-service';
 import * as favoriteService from '../services/favorite-service';
+import * as sentencePracticeService from '../services/sentence-practice-service';
 import type { FavoriteContent } from '../utils/content-helpers';
 import type { 
   Message, 
@@ -135,6 +136,34 @@ export async function handleMessage(message: Message): Promise<MessageResponse> 
 
       case 'GET_MANUAL_ENTRIES': {
         return await favoriteService.getManualEntries(userId!, message.articleUrl);
+      }
+
+      // Sentence practice operations (require auth)
+      case 'START_SENTENCE_PRACTICE': {
+        return await sentencePracticeService.startPractice(
+          message.expression,
+          message.expressionMeaning,
+          message.expressionType
+        );
+      }
+
+      case 'SUBMIT_SENTENCE': {
+        return await sentencePracticeService.submitSentence(
+          message.expression,
+          message.expressionMeaning,
+          message.sentenceType,
+          message.scenario,
+          message.userSentence
+        );
+      }
+
+      case 'GET_SENTENCE_HINT': {
+        return await sentencePracticeService.getHint(
+          message.expression,
+          message.expressionMeaning,
+          message.sentenceType,
+          message.scenario
+        );
       }
 
       default:

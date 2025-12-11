@@ -21,7 +21,10 @@ export type MessageType =
   | 'SEARCH_FAVORITES'
   | 'GET_ARTICLE_FAVORITES'
   | 'GENERATE_ENTRY_FIELDS'
-  | 'GET_MANUAL_ENTRIES';
+  | 'GET_MANUAL_ENTRIES'
+  | 'START_SENTENCE_PRACTICE'
+  | 'SUBMIT_SENTENCE'
+  | 'GET_SENTENCE_HINT';
 
 export interface ExtractContentRequest {
   type: 'EXTRACT_CONTENT';
@@ -301,6 +304,78 @@ export interface GetManualEntriesResponse {
   error?: string;
 }
 
+// Sentence Practice types
+export type SentenceType = 'affirmative' | 'interrogative' | 'negative' | 'exclamatory';
+
+export interface SentenceTask {
+  taskId: string;
+  expression: string;
+  sentenceType: SentenceType;
+  sentenceTypeLabel: string;
+  scenario: string;
+  hint?: string;
+}
+
+export interface SentenceCorrection {
+  original: string;
+  corrected: string;
+  explanation: string;
+}
+
+export interface SentenceFeedback {
+  isCorrect: boolean;
+  userSentence: string;
+  corrections?: SentenceCorrection[];
+  betterAlternative?: string;
+  praise?: string;
+}
+
+export interface StartSentencePracticeRequest {
+  type: 'START_SENTENCE_PRACTICE';
+  expression: string;
+  expressionMeaning: string;
+  expressionType: FavoriteType;
+}
+
+export interface StartSentencePracticeResponse {
+  success: boolean;
+  task?: SentenceTask;
+  error?: string;
+}
+
+export interface SubmitSentenceRequest {
+  type: 'SUBMIT_SENTENCE';
+  taskId: string;
+  expression: string;
+  expressionMeaning: string;
+  sentenceType: SentenceType;
+  scenario: string;
+  userSentence: string;
+}
+
+export interface SubmitSentenceResponse {
+  success: boolean;
+  feedback?: SentenceFeedback;
+  nextTask?: SentenceTask;
+  isComplete?: boolean;
+  error?: string;
+}
+
+export interface GetSentenceHintRequest {
+  type: 'GET_SENTENCE_HINT';
+  expression: string;
+  expressionMeaning: string;
+  sentenceType: SentenceType;
+  scenario: string;
+}
+
+export interface GetSentenceHintResponse {
+  success: boolean;
+  hint?: string;
+  exampleSentence?: string;
+  error?: string;
+}
+
 export type Message = 
   | ExtractContentRequest 
   | AnalyzeTextRequest 
@@ -319,7 +394,10 @@ export type Message =
   | SearchFavoritesRequest
   | GetArticleFavoritesRequest
   | GenerateEntryFieldsRequest
-  | GetManualEntriesRequest;
+  | GetManualEntriesRequest
+  | StartSentencePracticeRequest
+  | SubmitSentenceRequest
+  | GetSentenceHintRequest;
 
 export type MessageResponse = 
   | ExtractContentResponse 
@@ -338,4 +416,7 @@ export type MessageResponse =
   | SearchFavoritesResponse
   | GetArticleFavoritesResponse
   | GenerateEntryFieldsResponse
-  | GetManualEntriesResponse;
+  | GetManualEntriesResponse
+  | StartSentencePracticeResponse
+  | SubmitSentenceResponse
+  | GetSentenceHintResponse;

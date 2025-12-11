@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Heart, Loader2 } from 'lucide-react';
+import { Heart, Loader2, PenLine } from 'lucide-react';
 import type { IdiomItem } from '@/lib/storage';
 import type { AddFavoriteResponse, RemoveFavoriteResponse } from '@/lib/messages';
 
@@ -14,6 +14,8 @@ interface IdiomCardProps {
   favoriteId?: string;
   onFavoriteAdded?: (favoriteId: string) => void;
   onFavoriteRemoved?: () => void;
+  // Practice callback
+  onPractice?: (expression: string, meaning: string) => void;
 }
 
 export function IdiomCard({ 
@@ -26,6 +28,7 @@ export function IdiomCard({
   favoriteId,
   onFavoriteAdded,
   onFavoriteRemoved,
+  onPractice,
 }: IdiomCardProps) {
   const [isLoading, setIsLoading] = useState(false);
 
@@ -87,6 +90,18 @@ export function IdiomCard({
       </div>
       <p className="card-meaning">{item.meaning}</p>
       <div className="card-context">"{item.example}"</div>
+      {onPractice && (
+        <button
+          className="practice-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPractice(item.expression, item.meaning);
+          }}
+        >
+          <PenLine size={14} />
+          练习造句
+        </button>
+      )}
     </div>
   );
 }
