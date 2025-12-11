@@ -98,7 +98,7 @@
 }
 
 .sp-message-user .sp-message-bubble {
-  background: var(--accent-color);
+  background: var(--accent-primary);
   color: white;
   border-bottom-right-radius: 4px;
 }
@@ -215,7 +215,7 @@
 }
 
 .sp-hint-btn:hover:not(:disabled) {
-  color: var(--accent-color);
+  color: var(--accent-primary);
 }
 
 .sp-hint-btn:disabled {
@@ -244,7 +244,7 @@
 }
 
 .sp-textarea:focus {
-  border-color: var(--accent-color);
+  border-color: var(--accent-primary);
 }
 
 .sp-textarea::placeholder {
@@ -288,7 +288,7 @@
 }
 
 .sp-submit-btn {
-  background: var(--accent-color);
+  background: var(--accent-primary);
   color: white;
 }
 
@@ -347,7 +347,7 @@
   padding: 12px 24px;
   border: none;
   border-radius: 8px;
-  background: var(--accent-color);
+  background: var(--accent-primary);
   color: white;
   font-size: 14px;
   font-weight: 500;
