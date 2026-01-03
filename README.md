@@ -20,11 +20,11 @@ Nuance 是一款智能英语学习浏览器扩展，帮助你从任何英文网�
 
 基于 DeepSeek AI 对文本进行三维度语言分析：
 
-| 类别 | 说明 | 示例 |
-|------|------|------|
-| **习惯用法** | 地道习语、短语动词、固定搭配 | "running out of time", "make a decision" |
-| **核心语法** | 倒装句、虚拟语气、定语从句等进阶句型 | 分词短语、强调句 |
-| **核心词汇** | B1-C2 级别词汇，含中文释义和语境 | 按难度等级标注 |
+| 类别         | 说明                                 | 示例                                     |
+| ------------ | ------------------------------------ | ---------------------------------------- |
+| **习惯用法** | 地道习语、短语动词、固定搭配         | "running out of time", "make a decision" |
+| **核心语法** | 倒装句、虚拟语气、定语从句等进阶句型 | 分词短语、强调句                         |
+| **核心词汇** | B1-C2 级别词汇，含中文释义和语境     | 按难度等级标注                           |
 
 ### 🎨 现代化界面
 
@@ -114,12 +114,14 @@ pnpm zip:firefox
 ## 🛠️ 技术架构
 
 ```
-learn-en/
+nuance-extension/
 ├── entrypoints/
 │   ├── background.ts      # Service Worker - API 调用、消息路由
 │   ├── content.ts         # Content Script - 内容提取、高亮功能
 │   └── sidepanel/         # 侧边栏 React 应用
 │       ├── App.tsx        # 主组件
+│       ├── index.html     # 侧边栏 HTML 入口
+│       ├── main.tsx       # React 挂载入口
 │       ├── components/    # UI 组件
 │       └── styles.css     # 样式文件
 ├── lib/
@@ -128,6 +130,7 @@ learn-en/
 │   └── storage.ts         # 存储管理
 ├── public/
 │   └── icon/              # 扩展图标
+├── landing/               # 产品落地页（本地预览）
 └── wxt.config.ts          # WXT 配置
 ```
 
@@ -141,23 +144,24 @@ learn-en/
 
 ### 扩展权限
 
-| 权限 | 用途 |
-|------|------|
-| `storage` | 存储 API Key 和分析历史 |
-| `activeTab` | 访问当前标签页内容 |
-| `sidePanel` | 显示侧边栏界面 |
+| 权限        | 用途                    |
+| ----------- | ----------------------- |
+| `storage`   | 存储 API Key 和分析历史 |
+| `activeTab` | 访问当前标签页内容      |
+| `sidePanel` | 显示侧边栏界面          |
 
 ## 📋 NPM Scripts
 
-| 命令 | 说明 |
-|------|------|
-| `pnpm dev` | 启动 Chrome 开发服务器 |
-| `pnpm dev:firefox` | 启动 Firefox 开发服务器 |
-| `pnpm build` | 构建 Chrome 生产版本 |
-| `pnpm build:firefox` | 构建 Firefox 生产版本 |
-| `pnpm zip` | 打包 Chrome 扩展 |
-| `pnpm zip:firefox` | 打包 Firefox 扩展 |
-| `pnpm compile` | TypeScript 类型检查 |
+| 命令                 | 说明                    |
+| -------------------- | ----------------------- |
+| `pnpm dev`           | 启动 Chrome 开发服务器  |
+| `pnpm dev:firefox`   | 启动 Firefox 开发服务器 |
+| `pnpm build`         | 构建 Chrome 生产版本    |
+| `pnpm build:firefox` | 构建 Firefox 生产版本   |
+| `pnpm zip`           | 打包 Chrome 扩展        |
+| `pnpm zip:firefox`   | 打包 Firefox 扩展       |
+| `pnpm compile`       | TypeScript 类型检查     |
+| `pnpm landing`       | 本地预览 landing 页面   |
 
 ## 🔧 配置说明
 
@@ -182,14 +186,91 @@ learn-en/
 
 ```ts
 export default defineConfig({
-  modules: ['@wxt-dev/module-react'],
+  modules: ["@wxt-dev/module-react"],
   manifest: {
-    name: 'Nuance',
-    description: 'AI-powered English learning assistant',
-    permissions: ['storage', 'activeTab', 'sidePanel'],
+    name: "Nuance",
+    description: "AI-powered English learning assistant",
+    permissions: ["storage", "activeTab", "sidePanel"],
     // ...
   },
 });
+```
+
+## 📚 API 文档
+
+### 消息通信
+
+- 消息类型与载荷
+
+  - `EXTRACT_CONTENT`: 从内容脚本提取正文，响应包含 `title | content | textContent | url`
+  - `ANALYZE_TEXT`: 后台调用 DeepSeek 进行分析，响应为 `AnalysisResult`
+  - `HIGHLIGHT_TEXT`: 在页面中高亮指定文本，响应包含 `found`
+  - `CLEAR_HIGHLIGHTS`: 清除页面所有高亮
+
+- 交互序列
+
+```
+Sidepanel -> Background: EXTRACT_CONTENT
+Background -> Content: EXTRACT_CONTENT
+Content -> Background: ExtractContentResponse
+Background -> Sidepanel: ExtractContentResponse
+
+Sidepanel -> Background: ANALYZE_TEXT
+Background -> DeepSeek API: POST /chat/completions
+DeepSeek API -> Background: JSON (AnalysisResult)
+Background -> Sidepanel: AnalyzeTextResponse
+
+Sidepanel -> Background: HIGHLIGHT_TEXT
+Background -> Content: HIGHLIGHT_TEXT
+Content -> Background: HighlightTextResponse
+Background -> Sidepanel: HighlightTextResponse
+```
+
+### 代码示例
+
+提取与分析：
+
+```ts
+const extract = await browser.runtime.sendMessage({ type: "EXTRACT_CONTENT" });
+const analyze = await browser.runtime.sendMessage({
+  type: "ANALYZE_TEXT",
+  text: extract.data!.textContent,
+});
+```
+
+高亮与清除：
+
+```ts
+await browser.runtime.sendMessage({ type: "CLEAR_HIGHLIGHTS" });
+await browser.runtime.sendMessage({ type: "HIGHLIGHT_TEXT", text: someText });
+```
+
+### DeepSeek 接口
+
+- 端点：`POST https://api.deepseek.com/chat/completions`
+- 模型：`deepseek-chat`
+- 请求体示例：
+
+```json
+{
+  "model": "deepseek-chat",
+  "messages": [
+    { "role": "system", "content": "<系统提示词>" },
+    { "role": "user", "content": "<构造后的分析提示词>" }
+  ],
+  "temperature": 0.3,
+  "response_format": { "type": "json_object" }
+}
+```
+
+- 响应数据：从 `choices[0].message.content` 解析为 JSON，结构如下：
+
+```json
+{
+  "idioms": [{ "expression": "", "meaning": "", "example": "" }],
+  "syntax": [{ "sentence": "", "structure": "", "explanation": "" }],
+  "vocabulary": [{ "word": "", "level": "B1", "definition": "", "context": "" }]
+}
 ```
 
 ## 🤝 贡献指南

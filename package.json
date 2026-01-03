@@ -2,6 +2,7 @@
   "name": "nuance-extension",
   "description": "AI-powered English learning assistant - Extract, Analyze, Master",
   "private": true,
+  "license": "MIT",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
