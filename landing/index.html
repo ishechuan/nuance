@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="title">Nuance - AI-Powered English Learning Assistant</title>
+    <meta name="description" data-i18n="meta_desc" content="Master English while you browse. Nuance extracts idioms, syntax, and vocabulary from any webpage using AI.">
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="#" class="logo">
+                <span class="logo-icon"><i class="fa-solid fa-layer-group"></i></span>
+                Nuance
+            </a>
+            <div class="nav-links">
+                <a href="#features" data-i18n="nav_features">Features</a>
+                <a href="#how-it-works" data-i18n="nav_how_it_works">How it Works</a>
+                <a href="https://github.com/cerebralatlas/nuance-extension" target="_blank"><i class="fa-brands fa-github"></i> GitHub</a>
+                <div class="lang-switcher">
+                    <button class="lang-btn active" data-lang="en">EN</button>
+                    <span class="lang-divider">/</span>
+                    <button class="lang-btn" data-lang="zh">中文</button>
+                </div>
+                <a href="#" class="btn btn-primary btn-sm" data-i18n="nav_download">Download</a>
+            </div>
+            <div class="mobile-menu-btn">
+                <i class="fa-solid fa-bars"></i>
+            </div>
+        </div>
+    </nav>
+
+    <header class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <div class="badge" data-i18n="hero_badge">New: Powered by DeepSeek AI</div>
+                <h1 data-i18n="hero_title">Master English Contextually<br>While You Browse</h1>
+                <p data-i18n="hero_desc">Transform any webpage into a language lesson. Nuance intelligently extracts idioms, complex syntax, and advanced vocabulary to help you reach native-level fluency.</p>
+                <div class="hero-actions">
+                    <a href="#" class="btn btn-primary"><i class="fa-brands fa-chrome"></i> <span data-i18n="btn_add_chrome">Add to Chrome</span></a>
+                    <a href="#" class="btn btn-secondary"><i class="fa-solid fa-play"></i> <span data-i18n="btn_watch_demo">Watch Demo</span></a>
+                </div>
+                <div class="stats">
+                    <div class="stat-item">
+                        <span class="stat-number">AI</span>
+                        <span class="stat-label" data-i18n="stat_ai_label">Deep Analysis</span>
+                    </div>
+                    <div class="stat-divider"></div>
+                    <div class="stat-item">
+                        <span class="stat-number">3</span>
+                        <span class="stat-label" data-i18n="stat_dimensions_label">Learning Dimensions</span>
+                    </div>
+                    <div class="stat-divider"></div>
+                    <div class="stat-item">
+                        <span class="stat-number">100%</span>
+                        <span class="stat-label" data-i18n="stat_privacy_label">Privacy Focused</span>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <div class="browser-mockup">
+                    <div class="browser-header">
+                        <div class="dots">
+                            <span class="dot red"></span>
+                            <span class="dot yellow"></span>
+                            <span class="dot green"></span>
+                        </div>
+                        <div class="address-bar">https://nytimes.com/article...</div>
+                    </div>
+                    <div class="browser-body">
+                        <div class="page-content">
+                            <div class="text-block"></div>
+                            <div class="text-block short"></div>
+                            <div class="text-block"></div>
+                            <div class="highlight-line"></div>
+                            <div class="text-block"></div>
+                        </div>
+                        <div class="extension-sidebar">
+                            <div class="sidebar-header">
+                                <div class="sidebar-title" data-i18n="sidebar_title">Nuance Analysis</div>
+                            </div>
+                            <div class="sidebar-tabs">
+                                <span class="active" data-i18n="tab_idioms">Idioms</span>
+                                <span data-i18n="tab_syntax">Syntax</span>
+                                <span data-i18n="tab_vocab">Vocab</span>
+                            </div>
+                            <div class="card">
+                                <div class="card-tag">Idiom</div>
+                                <h4 data-i18n="card_idiom_title">running out of time</h4>
+                                <p data-i18n="card_idiom_desc">To have no time left to finish something.</p>
+                            </div>
+                            <div class="card">
+                                <div class="card-tag syntax">Syntax</div>
+                                <h4 data-i18n="card_syntax_title">Had I known...</h4>
+                                <p data-i18n="card_syntax_desc">Inversion used in conditional sentences.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="glow-effect"></div>
+            </div>
+        </div>
+    </header>
+
+    <section id="features" class="features">
+        <div class="container">
+            <div class="section-header">
+                <h2 data-i18n="features_title">Why Choose Nuance?</h2>
+                <p data-i18n="features_desc">Go beyond simple translation. Understand the *why* and *how* of English.</p>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="icon-box blue">
+                        <i class="fa-solid fa-shapes"></i>
+                    </div>
+                    <h3 data-i18n="feature_idiom_title">Idiom Mastery</h3>
+                    <p data-i18n="feature_idiom_desc">Don't just read words, understand the culture. Identify phrasal verbs, idioms, and fixed expressions that dictionaries often miss.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon-box purple">
+                        <i class="fa-solid fa-code-branch"></i>
+                    </div>
+                    <h3 data-i18n="feature_syntax_title">Syntax Breakdown</h3>
+                    <p data-i18n="feature_syntax_desc">Decode complex sentence structures. Learn how inversions, subjunctive moods, and relative clauses work in real-world contexts.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon-box green">
+                        <i class="fa-solid fa-book-open"></i>
+                    </div>
+                    <h3 data-i18n="feature_vocab_title">Contextual Vocabulary</h3>
+                    <p data-i18n="feature_vocab_desc">Learn B1-C2 level words with definitions tailored to the specific context of the article you're reading.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon-box orange">
+                        <i class="fa-solid fa-filter"></i>
+                    </div>
+                    <h3 data-i18n="feature_extraction_title">Smart Extraction</h3>
+                    <p data-i18n="feature_extraction_desc">Powered by Mozilla Readability, we strip away ads and clutter so you (and the AI) can focus on the content that matters.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon-box red">
+                        <i class="fa-solid fa-highlighter"></i>
+                    </div>
+                    <h3 data-i18n="feature_highlight_title">Interactive Highlighting</h3>
+                    <p data-i18n="feature_highlight_desc">Click on any analysis card to instantly scroll to and highlight the corresponding sentence in the article.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon-box teal">
+                        <i class="fa-solid fa-bolt"></i>
+                    </div>
+                    <h3 data-i18n="feature_ai_title">DeepSeek AI</h3>
+                    <p data-i18n="feature_ai_desc">Leverage state-of-the-art LLM technology for highly accurate, nuanced, and context-aware linguistic analysis.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="how-it-works" class="how-it-works">
+        <div class="container">
+            <div class="split-layout">
+                <div class="content-side">
+                    <h2 data-i18n="how_title">How It Works</h2>
+                    <div class="steps">
+                        <div class="step">
+                            <div class="step-number">01</div>
+                            <div class="step-content">
+                                <h3 data-i18n="step_1_title">Open the Sidebar</h3>
+                                <p data-i18n="step_1_desc">Navigate to any English article and click the Nuance icon to open the analysis sidebar.</p>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">02</div>
+                            <div class="step-content">
+                                <h3 data-i18n="step_2_title">Configure API</h3>
+                                <p data-i18n="step_2_desc">Enter your DeepSeek API key in the settings. It's affordable and ensures your data privacy.</p>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">03</div>
+                            <div class="step-content">
+                                <h3 data-i18n="step_3_title">Analyze & Learn</h3>
+                                <p data-i18n="step_3_desc">Click analyze and watch as the AI breaks down the text into digestible learning points.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="image-side">
+                    <div class="abstract-shape">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta">
+        <div class="container">
+            <div class="cta-box">
+                <h2 data-i18n="cta_title">Ready to elevate your English?</h2>
+                <p data-i18n="cta_desc">Join users who are mastering the nuances of the language every day.</p>
+                <a href="#" class="btn btn-light" data-i18n="btn_get_started">Get Started for Free</a>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="logo-icon"><i class="fa-solid fa-layer-group"></i></span>
+                    <span class="brand-name">Nuance</span>
+                    <p data-i18n="footer_slogan">Extract. Analyze. Master.</p>
+                </div>
+                <div class="link-group">
+                    <h4 data-i18n="footer_product">Product</h4>
+                    <a href="#" data-i18n="footer_features">Features</a>
+                    <a href="#" data-i18n="footer_changelog">Changelog</a>
+                    <a href="#" data-i18n="footer_download">Download</a>
+                </div>
+                <div class="link-group">
+                    <h4 data-i18n="footer_resources">Resources</h4>
+                    <a href="#" data-i18n="footer_docs">Documentation</a>
+                    <a href="#" data-i18n="footer_api">API Guide</a>
+                    <a href="#" data-i18n="footer_privacy">Privacy Policy</a>
+                </div>
+                <div class="link-group">
+                    <h4 data-i18n="footer_community">Community</h4>
+                    <a href="https://github.com/cerebralatlas/nuance-extension">GitHub</a>
+                    <a href="#">Discord</a>
+                    <a href="#">Twitter</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p data-i18n="footer_copyright">&copy; 2024 Nuance Extension. Open Source under MIT License.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="translations.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
