@@ -9,6 +9,10 @@ Nuance 是一款智能英语学习浏览器扩展，帮助你从任何英文网�
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
+## 📥 下载发布版
+
+- 最新版本： [v1.0.0](https://github.com/cerebralatlas/nuance/releases/tag/v1.0.0)
+
 ## ✨ 功能特点
 
 ### 🔍 智能内容提取
