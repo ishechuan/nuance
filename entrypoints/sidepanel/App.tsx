@@ -1,16 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Settings, Sparkles, FileText, BookOpen, MessageSquare, Lightbulb } from 'lucide-react';
+import { Settings, Sparkles, FileText, BookOpen, MessageSquare, Lightbulb, History as HistoryIcon } from 'lucide-react';
 import { SettingsPanel } from './components/Settings';
+import { HistoryPanel } from './components/HistoryPanel';
 import { IdiomCard } from './components/IdiomCard';
 import { SyntaxCard } from './components/SyntaxCard';
 import { VocabularyCard } from './components/VocabularyCard';
-import { hasApiKey } from '@/lib/storage';
+import { hasApiKey, addAnalysisRecord } from '@/lib/storage';
 import type { AnalysisResult, IdiomItem, SyntaxItem, VocabularyItem } from '@/lib/storage';
 import type { ExtractContentResponse, AnalyzeTextResponse } from '@/lib/messages';
 import { useI18n } from './i18n';
 
 type Tab = 'idioms' | 'syntax' | 'vocabulary';
-type View = 'main' | 'settings';
+type View = 'main' | 'settings' | 'history';
 
 interface ArticleInfo {
   title: string;
@@ -53,7 +54,7 @@ function App() {
         textContent: response.data.textContent,
       });
       
-      return response.data.textContent;
+      return response.data;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setError(message);
@@ -69,8 +70,8 @@ function App() {
     
     try {
       // First extract content
-      const text = await extractContent();
-      if (!text) {
+      const articleData = await extractContent();
+      if (!articleData) {
         setIsLoading(false);
         return;
       }
@@ -78,7 +79,7 @@ function App() {
       // Then analyze
       const response: AnalyzeTextResponse = await browser.runtime.sendMessage({
         type: 'ANALYZE_TEXT',
-        text,
+        text: articleData.textContent,
       });
       
       if (!response.success || !response.data) {
@@ -86,6 +87,18 @@ function App() {
       }
       
       setAnalysis(response.data);
+      
+      if (response.data) {
+        try {
+          await addAnalysisRecord({
+            title: articleData.title,
+            url: articleData.url,
+            analysis: response.data,
+          });
+        } catch (error) {
+          console.error('Failed to save analysis record:', error);
+        }
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setError(message);
@@ -120,6 +133,15 @@ function App() {
     setView('main');
   }, []);
 
+  // Render history view
+  if (view === 'history') {
+    return (
+      <div className="app">
+        <HistoryPanel onBack={() => setView('main')} />
+      </div>
+    );
+  }
+
   // Render settings view
   if (view === 'settings') {
     return (
@@ -149,6 +171,13 @@ function App() {
           <h1>{t('appTitle')}</h1>
         </div>
         <div className="header-actions">
+          <button 
+            className="icon-btn" 
+            onClick={() => setView('history')}
+            title={t('history')}
+          >
+            <HistoryIcon size={18} />
+          </button>
           <button 
             className="icon-btn" 
             onClick={() => setView('settings')}

@@ -80,7 +80,7 @@ export async function addAnalysisRecord(record: Omit<AnalysisRecord, 'id' | 'tim
   const history = await getAnalysisHistory();
   const newRecord: AnalysisRecord = {
     ...record,
-    id: crypto.randomUUID(),
+    id: crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     timestamp: Date.now(),
   };
   
@@ -91,6 +91,12 @@ export async function addAnalysisRecord(record: Omit<AnalysisRecord, 'id' | 'tim
 
 export async function clearAnalysisHistory(): Promise<void> {
   await browser.storage.local.set({ [STORAGE_KEYS.ANALYSIS_HISTORY]: [] });
+}
+
+export async function deleteAnalysisRecord(id: string): Promise<void> {
+  const history = await getAnalysisHistory();
+  const updatedHistory = history.filter((record) => record.id !== id);
+  await browser.storage.local.set({ [STORAGE_KEYS.ANALYSIS_HISTORY]: updatedHistory });
 }
 
 export async function getSettings(): Promise<UserSettings> {
