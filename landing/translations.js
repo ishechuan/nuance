@@ -5,7 +5,7 @@ const translations = {
         "nav_features": "Features",
         "nav_how_it_works": "How it Works",
         "nav_download": "Download",
-        "hero_badge": "New: Language & Preferences",
+        "hero_badge": "New: History & Exports",
         "hero_title": "Master English Contextually<br>While You Browse",
         "hero_desc": "Transform any webpage into a language lesson. Nuance intelligently extracts idioms, complex syntax, and advanced vocabulary to help you reach native-level fluency.",
         "btn_add_chrome": "Add to Chrome",
@@ -37,6 +37,8 @@ const translations = {
         "feature_ai_desc": "Leverage state-of-the-art LLM technology for highly accurate, nuanced, and context-aware linguistic analysis.",
         "feature_prefs_title": "Customizable Preferences",
         "feature_prefs_desc": "Choose vocabulary levels and set max items for idioms, syntax, and vocabulary. Toggle UI language (EN/中文).",
+        "feature_history_title": "Learning History",
+        "feature_history_desc": "Auto-save analysis records (max 50), search by title/URL, filter by date, and export to JSON/CSV.",
         "how_title": "How It Works",
         "step_1_title": "Open the Sidebar",
         "step_1_desc": "Navigate to any English article and click the Nuance icon to open the analysis sidebar.",
@@ -57,7 +59,7 @@ const translations = {
         "footer_docs": "Documentation",
         "footer_api": "API Guide",
         "footer_privacy": "Privacy Policy",
-        "footer_copyright": "&copy; 2024 Nuance Extension. Open Source under MIT License."
+        "footer_copyright": "&copy; 2026 Nuance Extension. Open Source under MIT License."
     },
     "zh": {
         "title": "Nuance - AI 驱动的英语学习助手",
@@ -65,7 +67,7 @@ const translations = {
         "nav_features": "功能特点",
         "nav_how_it_works": "工作原理",
         "nav_download": "下载",
-        "hero_badge": "最新：新增语言切换与分析偏好",
+        "hero_badge": "最新：历史记录与导出功能",
         "hero_title": "在浏览中<br>情境化掌握英语",
         "hero_desc": "将任何网页转化为语言课程。Nuance 智能提取习语、复杂句法和高级词汇，助你达到母语级流利度。",
         "btn_add_chrome": "添加到 Chrome",
@@ -97,6 +99,8 @@ const translations = {
         "feature_ai_desc": "利用最先进的 LLM 技术，进行高度准确、细致且感知上下文的语言分析。",
         "feature_prefs_title": "可配置分析偏好",
         "feature_prefs_desc": "选择词汇等级并设置习语、句法、词汇的最大返回数；支持界面语言切换（English/中文）。",
+        "feature_history_title": "学习历史",
+        "feature_history_desc": "自动保存分析记录（最多 50 条），按标题/URL 搜索，按日期筛选，支持导出为 JSON/CSV 格式。",
         "how_title": "工作原理",
         "step_1_title": "打开侧边栏",
         "step_1_desc": "浏览任何英语文章，点击 Nuance 图标打开分析侧边栏。",
@@ -117,6 +121,6 @@ const translations = {
         "footer_docs": "文档",
         "footer_api": "API 指南",
         "footer_privacy": "隐私政策",
-        "footer_copyright": "&copy; 2024 Nuance Extension. 基于 MIT 协议开源。"
+        "footer_copyright": "&copy; 2026 Nuance Extension. 基于 MIT 协议开源。"
     }
 };

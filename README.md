@@ -43,6 +43,14 @@ Nuance 是一款智能英语学习浏览器扩展，帮助你从任何英文网�
 - 平滑滚动到目标位置
 - 柔和的高亮动画效果
 
+### 📊 学习历史管理
+
+- 自动保存所有分析记录（最多保留 50 条）
+- 按标题、URL 搜索历史记录
+- 按时间筛选（今天/本周/本月）
+- 导出学习历史为 JSON 或 CSV 格式
+- 查看历史详情，删除单条记录或清空全部
+
 ### ⚙️ 可配置的分析偏好
 
 - 词汇等级过滤（B1/B2/C1/C2）
@@ -129,6 +137,14 @@ pnpm zip:firefox
 
 点击任意卡片，原文中对应内容会被高亮显示并自动滚动到视野内。
 
+### 5. 管理学习历史
+
+1. 点击侧边栏顶部的 🕐 历史图标
+2. 使用搜索框按标题或 URL 查找记录
+3. 按时间筛选（今天/本周/本月）
+4. 点击查看详情，或删除单条记录
+5. 使用导出按钮将历史导出为 JSON 或 CSV 格式
+
 ## 🛠️ 技术架构
 
 ```
@@ -142,11 +158,18 @@ nuance-extension/
 │       ├── main.tsx       # React 挂载入口
 │       ├── i18n.tsx       # 语言切换与文案
 │       ├── components/    # UI 组件
+│       │   ├── Settings.tsx           # 设置面板
+│       │   ├── HistoryPanel.tsx       # 历史记录面板
+│       │   ├── HistoryDetailView.tsx  # 历史详情视图
+│       │   ├── HistoryItem.tsx        # 历史记录项
+│       │   ├── IdiomCard.tsx          # 习语卡片
+│       │   ├── SyntaxCard.tsx         # 句法卡片
+│       │   └── VocabularyCard.tsx     # 词汇卡片
 │       └── styles.css     # 样式文件
 ├── lib/
 │   ├── messages.ts        # 消息类型定义
 │   ├── prompts.ts         # AI Prompt 模板
-│   └── storage.ts         # 存储管理
+│   └── storage.ts         # 存储管理（API Key、历史记录、设置）
 ├── public/
 │   └── icon/              # 扩展图标
 ├── landing/               # 产品落地页（本地预览）
@@ -158,6 +181,7 @@ nuance-extension/
 - **[WXT](https://wxt.dev/)** - 现代浏览器扩展开发框架
 - **React 19** - UI 框架
 - **TypeScript** - 类型安全
+- **[Lucide React](https://lucide.dev/)** - 现代图标库
 - **Mozilla Readability** - 网页正文提取
 - **DeepSeek API** - AI 文本分析
 
@@ -174,6 +198,7 @@ nuance-extension/
 - API Key 与用户偏好保存在浏览器本地存储
 - 仅在分析时将提取的文章正文发送至 DeepSeek 接口
 - 不收集额外的个人数据或浏览历史
+- 分析历史自动保存在本地，最多保留 50 条记录，可随时删除或清空
 ## 📋 NPM Scripts
 
 | 命令                 | 说明                    |
