@@ -58,12 +58,22 @@ export const ANALYSIS_USER_PROMPT = `分析以下英文文本，提取三个类�
 待分析文本：
 `;
 
-export function buildAnalysisPrompt(text: string): string {
-  // Truncate very long texts to avoid token limits
+export function buildAnalysisPrompt(
+  text: string,
+  options?: {
+    vocabLevels?: ('B1' | 'B2' | 'C1' | 'C2')[];
+    maxIdioms?: number;
+    maxSyntax?: number;
+    maxVocabulary?: number;
+  }
+): string {
   const maxLength = 8000;
-  const truncatedText = text.length > maxLength 
-    ? text.slice(0, maxLength) + '...[truncated]' 
-    : text;
-  
-  return ANALYSIS_USER_PROMPT + truncatedText;
+  const truncatedText = text.length > maxLength ? text.slice(0, maxLength) + '...[truncated]' : text;
+  const levels = options?.vocabLevels && options.vocabLevels.length ? options.vocabLevels.join('、') : 'B1、B2、C1、C2';
+  const mi = typeof options?.maxIdioms === 'number' ? options!.maxIdioms : 10;
+  const ms = typeof options?.maxSyntax === 'number' ? options!.maxSyntax : 10;
+  const mv = typeof options?.maxVocabulary === 'number' ? options!.maxVocabulary : 10;
+  const constraints =
+    `\n附加约束：\n- 词汇仅选择等级为：${levels}\n- 每个类别最多返回：习语${mi}条、语法${ms}条、词汇${mv}条\n`;
+  return ANALYSIS_USER_PROMPT + constraints + truncatedText;
 }

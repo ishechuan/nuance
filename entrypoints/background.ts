@@ -1,4 +1,4 @@
-import { getApiKey } from '@/lib/storage';
+import { getApiKey, getSettings, type AnalysisResult } from '@/lib/storage';
 import { ANALYSIS_SYSTEM_PROMPT, buildAnalysisPrompt } from '@/lib/prompts';
 import type { 
   Message, 
@@ -7,13 +7,13 @@ import type {
   HighlightTextResponse,
   ClearHighlightsResponse
 } from '@/lib/messages';
-import type { AnalysisResult } from '@/lib/storage';
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 
 // Call DeepSeek API for analysis
 async function analyzeWithDeepSeek(text: string): Promise<AnalyzeTextResponse> {
   const apiKey = await getApiKey();
+  const settings = await getSettings();
   
   if (!apiKey) {
     return {
@@ -38,7 +38,12 @@ async function analyzeWithDeepSeek(text: string): Promise<AnalyzeTextResponse> {
           },
           {
             role: 'user',
-            content: buildAnalysisPrompt(text),
+            content: buildAnalysisPrompt(text, {
+              vocabLevels: settings.vocabLevels,
+              maxIdioms: settings.maxIdioms,
+              maxSyntax: settings.maxSyntax,
+              maxVocabulary: settings.maxVocabulary,
+            }),
           },
         ],
         temperature: 0.3,
@@ -75,6 +80,11 @@ async function analyzeWithDeepSeek(text: string): Promise<AnalyzeTextResponse> {
         error: 'Invalid analysis format received from API',
       };
     }
+    const allowed = new Set(settings.vocabLevels);
+    analysis.vocabulary = (analysis.vocabulary || []).filter((v) => allowed.has(v.level));
+    analysis.idioms = (analysis.idioms || []).slice(0, settings.maxIdioms);
+    analysis.syntax = (analysis.syntax || []).slice(0, settings.maxSyntax);
+    analysis.vocabulary = (analysis.vocabulary || []).slice(0, settings.maxVocabulary);
     
     return {
       success: true,

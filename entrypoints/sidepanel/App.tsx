@@ -7,6 +7,7 @@ import { VocabularyCard } from './components/VocabularyCard';
 import { hasApiKey } from '@/lib/storage';
 import type { AnalysisResult, IdiomItem, SyntaxItem, VocabularyItem } from '@/lib/storage';
 import type { ExtractContentResponse, AnalyzeTextResponse } from '@/lib/messages';
+import { useI18n } from './i18n';
 
 type Tab = 'idioms' | 'syntax' | 'vocabulary';
 type View = 'main' | 'settings';
@@ -18,6 +19,7 @@ interface ArticleInfo {
 }
 
 function App() {
+  const { t, lang } = useI18n();
   const [view, setView] = useState<View>('main');
   const [activeTab, setActiveTab] = useState<Tab>('idioms');
   const [isLoading, setIsLoading] = useState(false);
@@ -141,45 +143,43 @@ function App() {
   // Render main view
   return (
     <div className="app">
-      {/* Header */}
       <header className="header">
         <div className="header-title">
           <Sparkles size={20} />
-          <h1>Nuance</h1>
+          <h1>{t('appTitle')}</h1>
         </div>
         <div className="header-actions">
           <button 
             className="icon-btn" 
             onClick={() => setView('settings')}
-            title="Settings"
+            title={t('settings')}
           >
             <Settings size={18} />
           </button>
         </div>
       </header>
 
-      {/* Main Content */}
       <div className="content">
-        {/* API Key Warning */}
         {!hasKey && (
           <div className="message error">
-            <span>Please configure your DeepSeek API key in settings first.</span>
+            <span>{t('apiKeyWarning')}</span>
           </div>
         )}
 
-        {/* Action Section */}
         <div className="action-section">
           {article ? (
             <div className="article-info">
               <span className="article-title">{article.title}</span>
               <span className="article-meta">
-                {article.textContent.length.toLocaleString()} characters extracted
+                {lang === 'zh'
+                  ? `已提取 ${article.textContent.length.toLocaleString()} ${t('charactersExtracted')}`
+                  : `${article.textContent.length.toLocaleString()} ${t('charactersExtracted')}`}
               </span>
             </div>
           ) : (
             <div className="article-info">
-              <span className="article-title">No article loaded</span>
-              <span className="article-meta">Click analyze to extract and analyze the current page</span>
+              <span className="article-title">{t('noArticle')}</span>
+              <span className="article-meta">{t('noArticleHint')}</span>
             </div>
           )}
           
@@ -191,25 +191,23 @@ function App() {
             {isLoading ? (
               <>
                 <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
-                <span>Analyzing...</span>
+                <span>{t('analyzing')}</span>
               </>
             ) : (
               <>
                 <FileText size={16} />
-                <span>Analyze Page</span>
+                <span>{t('analyzePage')}</span>
               </>
             )}
           </button>
         </div>
 
-        {/* Error Message */}
         {error && (
           <div className="message error fade-in">
             {error}
           </div>
         )}
 
-        {/* Tabs */}
         {analysis && (
           <>
             <div className="tabs">
@@ -218,7 +216,7 @@ function App() {
                 onClick={() => setActiveTab('idioms')}
               >
                 <MessageSquare size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-                Idioms
+                {t('tabIdioms')}
                 <span className="tab-badge">{analysis.idioms.length}</span>
               </button>
               <button 
@@ -226,7 +224,7 @@ function App() {
                 onClick={() => setActiveTab('syntax')}
               >
                 <BookOpen size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-                Syntax
+                {t('tabSyntax')}
                 <span className="tab-badge">{analysis.syntax.length}</span>
               </button>
               <button 
@@ -234,12 +232,11 @@ function App() {
                 onClick={() => setActiveTab('vocabulary')}
               >
                 <Lightbulb size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-                Vocabulary
+                {t('tabVocabulary')}
                 <span className="tab-badge">{analysis.vocabulary.length}</span>
               </button>
             </div>
 
-            {/* Tab Content */}
             <div className="card-list mt-4 fade-in">
               {activeTab === 'idioms' && analysis.idioms.map((item, index) => (
                 <IdiomCard
@@ -271,24 +268,20 @@ function App() {
           </>
         )}
 
-        {/* Empty State */}
         {!analysis && !isLoading && !error && (
           <div className="empty-state">
             <FileText className="empty-state-icon" size={64} />
-            <h3>Ready to Analyze</h3>
-            <p>
-              Navigate to an English article and click "Analyze Page" to extract vocabulary, idioms, and syntax patterns.
-            </p>
+            <h3>{t('ready')}</h3>
+            <p>{t('readyHint')}</p>
           </div>
         )}
 
-        {/* Loading State */}
         {isLoading && (
           <div className="loading fade-in">
             <div className="spinner" />
-            <span className="loading-text">Analyzing with DeepSeek AI...</span>
+            <span className="loading-text">{t('loadingAnalyzing')}</span>
             <span className="loading-text" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              This may take 10-30 seconds
+              {t('loadingMayTake')}
             </span>
           </div>
         )}
