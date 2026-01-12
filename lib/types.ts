@@ -75,3 +75,21 @@ export interface UserSettings {
   maxVocabulary: number;
   language: 'en' | 'zh';
 }
+
+export interface SearchMatch {
+  type: 'idiom' | 'syntax' | 'vocabulary';
+  expression?: string;
+  word?: string;
+  sentence?: string;
+  meaning: string;
+  example?: string;
+}
+
+export interface SearchResult {
+  recordId: string;
+  title: string;
+  url: string;
+  timestamp: number;
+  matchCount: number;
+  matches: SearchMatch[];
+}

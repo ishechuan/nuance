@@ -1,11 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, Search, Trash2, Download, FileText, Clock, Globe, AlertTriangle, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Search, Trash2, Download, FileText, AlertTriangle, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { getAnalysisHistory, clearAnalysisHistory, deleteAnalysisRecord, getConflictQueue, removeConflict } from '@/lib/storage';
 import type { AnalysisRecord } from '@/lib/types';
 import { resolveConflict, resolveAllConflicts } from '@/lib/github-sync';
 import { HistoryItem } from './HistoryItem';
 import { HistoryDetailView } from './HistoryDetailView';
+import { SearchResults } from './SearchResults';
+import { searchWord } from '@/lib/search';
+import { useDebounce } from '@/hooks/useDebounce';
 import type { ConflictRecord } from '@/lib/types';
 
 interface HistoryPanelProps {
@@ -14,6 +17,7 @@ interface HistoryPanelProps {
 }
 
 type DateFilter = 'all' | 'today' | 'week' | 'month';
+type ViewMode = 'articles' | 'search';
 
 export function HistoryPanel({ onBack, onConflictsChange }: HistoryPanelProps) {
   const { t, lang } = useI18n();
@@ -26,6 +30,8 @@ export function HistoryPanel({ onBack, onConflictsChange }: HistoryPanelProps) {
   const [conflicts, setConflicts] = useState<ConflictRecord[]>([]);
   const [showConflictModal, setShowConflictModal] = useState(false);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('articles');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
   useEffect(() => {
     loadHistory();
@@ -94,6 +100,10 @@ export function HistoryPanel({ onBack, onConflictsChange }: HistoryPanelProps) {
 
     return filtered;
   }, [records, searchQuery, dateFilter]);
+
+  const searchResults = useMemo(() => {
+    return searchWord(debouncedSearchQuery, records);
+  }, [debouncedSearchQuery, records]);
 
   const handleDelete = async (id: string) => {
     try {
@@ -195,6 +205,96 @@ export function HistoryPanel({ onBack, onConflictsChange }: HistoryPanelProps) {
     );
   }
 
+  const renderArticlesView = () => (
+    <>
+      <div className="history-controls fade-in">
+        <div className="search-box">
+          <Search size={16} className="search-icon" />
+          <input
+            type="text"
+            placeholder={t('search')}
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              if (e.target.value) setViewMode('search');
+            }}
+            className="form-input"
+          />
+        </div>
+
+        <select
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value as DateFilter)}
+          className="form-input form-select"
+        >
+          <option value="all">{t('allDates')}</option>
+          <option value="today">{t('today')}</option>
+          <option value="week">{t('thisWeek')}</option>
+          <option value="month">{t('thisMonth')}</option>
+        </select>
+
+        <div className="history-actions">
+          <button
+            className="icon-btn-small"
+            onClick={handleExportJson}
+            title={t('exportJson')}
+          >
+            <Download size={16} />
+          </button>
+          <button
+            className="icon-btn-small icon-btn-danger"
+            onClick={() => setShowClearConfirm(true)}
+            title={t('clearHistory')}
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+      </div>
+
+      {filteredRecords.length === 0 ? (
+        <div className="empty-state">
+          <FileText className="empty-state-icon" size={48} />
+          <h3>{lang === 'zh' ? '没有找到匹配的记录' : 'No matching records found'}</h3>
+        </div>
+      ) : (
+        <div className="history-list">
+          {filteredRecords.map((record) => (
+            <HistoryItem
+              key={record.id}
+              record={record}
+              onView={setSelectedRecord}
+              onDelete={handleDelete}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+
+  const renderSearchView = () => (
+    <>
+      <div className="search-controls fade-in">
+        <div className="search-box search-box-large">
+          <Search size={18} className="search-icon" />
+          <input
+            type="text"
+            placeholder={t('searchPlaceholder')}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="form-input"
+            autoFocus
+          />
+        </div>
+      </div>
+      <SearchResults
+        results={searchResults}
+        query={debouncedSearchQuery}
+        records={records}
+        onRecordClick={setSelectedRecord}
+      />
+    </>
+  );
+
   return (
     <div className="history-panel">
       <header className="header">
@@ -230,64 +330,22 @@ export function HistoryPanel({ onBack, onConflictsChange }: HistoryPanelProps) {
           </div>
         ) : (
           <>
-            <div className="history-controls fade-in">
-              <div className="search-box">
-                <Search size={16} className="search-icon" />
-                <input
-                  type="text"
-                  placeholder={t('search')}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="form-input"
-                />
-              </div>
-
-              <select
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-                className="form-input form-select"
+            <div className="view-tabs fade-in">
+              <button
+                className={`view-tab ${viewMode === 'articles' ? 'active' : ''}`}
+                onClick={() => setViewMode('articles')}
               >
-                <option value="all">{t('allDates')}</option>
-                <option value="today">{t('today')}</option>
-                <option value="week">{t('thisWeek')}</option>
-                <option value="month">{t('thisMonth')}</option>
-              </select>
-
-              <div className="history-actions">
-                <button
-                  className="icon-btn-small"
-                  onClick={handleExportJson}
-                  title={t('exportJson')}
-                >
-                  <Download size={16} />
-                </button>
-                <button
-                  className="icon-btn-small icon-btn-danger"
-                  onClick={() => setShowClearConfirm(true)}
-                  title={t('clearHistory')}
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
+                {t('tabArticles')}
+              </button>
+              <button
+                className={`view-tab ${viewMode === 'search' ? 'active' : ''}`}
+                onClick={() => setViewMode('search')}
+              >
+                {t('tabSearch')}
+              </button>
             </div>
 
-            {filteredRecords.length === 0 ? (
-              <div className="empty-state">
-                <FileText className="empty-state-icon" size={48} />
-                <h3>{lang === 'zh' ? '没有找到匹配的记录' : 'No matching records found'}</h3>
-              </div>
-            ) : (
-              <div className="history-list">
-                {filteredRecords.map((record) => (
-                  <HistoryItem
-                    key={record.id}
-                    record={record}
-                    onView={setSelectedRecord}
-                    onDelete={handleDelete}
-                  />
-                ))}
-              </div>
-            )}
+            {viewMode === 'articles' ? renderArticlesView() : renderSearchView()}
 
             {showConflictModal && (
               <div className="modal-overlay" onClick={() => setShowConflictModal(false)}>

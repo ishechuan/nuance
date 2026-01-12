@@ -55,8 +55,7 @@ export async function addAnalysisRecord(record: Omit<AnalysisRecord, 'id' | 'tim
     timestamp: Date.now(),
   };
   
-  // Keep only last 50 records
-  const updatedHistory = [newRecord, ...history].slice(0, 50);
+  const updatedHistory = [newRecord, ...history];
   await browser.storage.local.set({ [STORAGE_KEYS.ANALYSIS_HISTORY]: updatedHistory });
 }
 
