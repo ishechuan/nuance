@@ -1,4 +1,4 @@
-import type { AnalysisResult } from './storage';
+import type { AnalysisResult } from './types';
 
 // Message types for communication between extension components
 export type MessageType = 

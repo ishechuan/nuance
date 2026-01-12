@@ -4,7 +4,7 @@ import { useI18n } from '../i18n';
 import { IdiomCard } from './IdiomCard';
 import { SyntaxCard } from './SyntaxCard';
 import { VocabularyCard } from './VocabularyCard';
-import type { AnalysisRecord } from '@/lib/storage';
+import type { AnalysisRecord } from '@/lib/types';
 
 interface HistoryDetailViewProps {
   record: AnalysisRecord;

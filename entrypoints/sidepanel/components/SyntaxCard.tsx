@@ -1,4 +1,4 @@
-import type { SyntaxItem } from '@/lib/storage';
+import type { SyntaxItem } from '@/lib/types';
 
 interface SyntaxCardProps {
   item: SyntaxItem;

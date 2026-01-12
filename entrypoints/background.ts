@@ -1,8 +1,9 @@
-import { getApiKey, getSettings, type AnalysisResult } from '@/lib/storage';
+import { getApiKey, getSettings } from '@/lib/storage';
+import type { AnalysisResult } from '@/lib/types';
 import { ANALYSIS_SYSTEM_PROMPT, buildAnalysisPrompt } from '@/lib/prompts';
-import type { 
-  Message, 
-  AnalyzeTextResponse, 
+import type {
+  Message,
+  AnalyzeTextResponse,
   ExtractContentResponse,
   HighlightTextResponse,
   ClearHighlightsResponse

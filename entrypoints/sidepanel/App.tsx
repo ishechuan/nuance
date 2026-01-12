@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Settings, Sparkles, FileText, BookOpen, MessageSquare, Lightbulb, History as HistoryIcon } from 'lucide-react';
+import { Settings, Sparkles, FileText, BookOpen, MessageSquare, Lightbulb, History as HistoryIcon, RefreshCw, AlertCircle } from 'lucide-react';
 import { SettingsPanel } from './components/Settings';
 import { HistoryPanel } from './components/HistoryPanel';
 import { IdiomCard } from './components/IdiomCard';
 import { SyntaxCard } from './components/SyntaxCard';
 import { VocabularyCard } from './components/VocabularyCard';
 import { hasApiKey, addAnalysisRecord } from '@/lib/storage';
-import type { AnalysisResult, IdiomItem, SyntaxItem, VocabularyItem } from '@/lib/storage';
+import type { AnalysisResult, IdiomItem, SyntaxItem, VocabularyItem } from '@/lib/types';
 import type { ExtractContentResponse, AnalyzeTextResponse } from '@/lib/messages';
 import { useI18n } from './i18n';
+import { syncAfterAnalysis, getSyncStatusInfo } from '@/lib/github-sync';
+import { getConflictQueue } from '@/lib/storage';
 
 type Tab = 'idioms' | 'syntax' | 'vocabulary';
 type View = 'main' | 'settings' | 'history';
@@ -29,11 +31,27 @@ function App() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [highlightedItem, setHighlightedItem] = useState<string | null>(null);
   const [hasKey, setHasKey] = useState<boolean | null>(null);
+  const [syncStatus, setSyncStatus] = useState<{ status: string; message: string; conflictsCount: number }>({
+    status: 'idle',
+    message: '',
+    conflictsCount: 0,
+  });
 
   // Check API key on mount
   useEffect(() => {
     hasApiKey().then(setHasKey);
+    loadSyncStatus();
   }, []);
+
+  const loadSyncStatus = async () => {
+    const conflicts = await getConflictQueue();
+    const status = await getSyncStatusInfo();
+    setSyncStatus({
+      status: status.status,
+      message: status.message,
+      conflictsCount: conflicts.length,
+    });
+  };
 
   // Extract content from current page
   const extractContent = useCallback(async () => {
@@ -95,6 +113,8 @@ function App() {
             url: articleData.url,
             analysis: response.data,
           });
+          await syncAfterAnalysis();
+          await loadSyncStatus();
         } catch (error) {
           console.error('Failed to save analysis record:', error);
         }
@@ -137,7 +157,7 @@ function App() {
   if (view === 'history') {
     return (
       <div className="app">
-        <HistoryPanel onBack={() => setView('main')} />
+        <HistoryPanel onBack={() => setView('main')} onConflictsChange={loadSyncStatus} />
       </div>
     );
   }
@@ -146,7 +166,7 @@ function App() {
   if (view === 'settings') {
     return (
       <div className="app">
-        <SettingsPanel onBack={() => setView('main')} onSaved={handleSettingsSaved} />
+        <SettingsPanel onBack={() => setView('main')} onSaved={handleSettingsSaved} onSyncStatusChange={loadSyncStatus} />
       </div>
     );
   }
@@ -171,15 +191,25 @@ function App() {
           <h1>{t('appTitle')}</h1>
         </div>
         <div className="header-actions">
-          <button 
-            className="icon-btn" 
+          {syncStatus.conflictsCount > 0 && (
+            <button
+              className="icon-btn sync-conflict"
+              onClick={() => setView('history')}
+              title={t('resolveConflicts')}
+            >
+              <AlertCircle size={18} />
+              <span className="sync-badge">{syncStatus.conflictsCount}</span>
+            </button>
+          )}
+          <button
+            className="icon-btn"
             onClick={() => setView('history')}
             title={t('history')}
           >
             <HistoryIcon size={18} />
           </button>
-          <button 
-            className="icon-btn" 
+          <button
+            className="icon-btn"
             onClick={() => setView('settings')}
             title={t('settings')}
           >

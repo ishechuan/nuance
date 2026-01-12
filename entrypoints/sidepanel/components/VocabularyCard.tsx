@@ -1,4 +1,4 @@
-import type { VocabularyItem } from '@/lib/storage';
+import type { VocabularyItem } from '@/lib/types';
 
 interface VocabularyCardProps {
   item: VocabularyItem;

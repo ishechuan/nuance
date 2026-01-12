@@ -1,44 +1,15 @@
 // Types
-export interface AnalysisRecord {
-  id: string;
-  title: string;
-  url: string;
-  timestamp: number;
-  analysis: AnalysisResult;
-}
-
-export interface IdiomItem {
-  expression: string;
-  meaning: string;
-  example: string;
-}
-
-export interface SyntaxItem {
-  sentence: string;
-  structure: string;
-  explanation: string;
-}
-
-export interface VocabularyItem {
-  word: string;
-  level: 'B1' | 'B2' | 'C1' | 'C2';
-  definition: string;
-  context: string;
-}
-
-export interface AnalysisResult {
-  idioms: IdiomItem[];
-  syntax: SyntaxItem[];
-  vocabulary: VocabularyItem[];
-}
-
-export interface UserSettings {
-  vocabLevels: ('B1' | 'B2' | 'C1' | 'C2')[];
-  maxIdioms: number;
-  maxSyntax: number;
-  maxVocabulary: number;
-  language: 'en' | 'zh';
-}
+import type {
+  AnalysisRecord,
+  AnalysisResult,
+  IdiomItem,
+  SyntaxItem,
+  VocabularyItem,
+  UserSettings,
+  SyncSettings,
+  ConflictRecord,
+  SyncStatus,
+} from './types';
 
 const DEFAULT_SETTINGS: UserSettings = {
   vocabLevels: ['B1', 'B2', 'C1', 'C2'],
@@ -128,3 +99,88 @@ export async function setSettings(partial: Partial<UserSettings>): Promise<void>
   };
   await browser.storage.local.set({ [STORAGE_KEYS.SETTINGS]: next });
 }
+
+const STORAGE_KEYS_SYNC = {
+  SYNC_SETTINGS: 'nuance_sync_settings',
+  CONFLICT_QUEUE: 'nuance_conflict_queue',
+} as const;
+
+const DEFAULT_SYNC_SETTINGS: SyncSettings = {
+  githubToken: '',
+  gistId: null,
+  lastSyncTime: 0,
+  autoSync: true,
+  syncOnAnalyze: true,
+};
+
+export async function getSyncSettings(): Promise<SyncSettings> {
+  const result = await browser.storage.local.get(STORAGE_KEYS_SYNC.SYNC_SETTINGS);
+  const raw = result[STORAGE_KEYS_SYNC.SYNC_SETTINGS];
+  if (!raw || typeof raw !== 'object') return DEFAULT_SYNC_SETTINGS;
+  return {
+    githubToken: typeof raw.githubToken === 'string' ? raw.githubToken : '',
+    gistId: typeof raw.gistId === 'string' ? raw.gistId : null,
+    lastSyncTime: typeof raw.lastSyncTime === 'number' ? raw.lastSyncTime : 0,
+    autoSync: raw.autoSync !== false,
+    syncOnAnalyze: raw.syncOnAnalyze !== false,
+  };
+}
+
+export async function setSyncSettings(partial: Partial<SyncSettings>): Promise<void> {
+  const current = await getSyncSettings();
+  const next: SyncSettings = {
+    githubToken: partial.githubToken !== undefined ? partial.githubToken : current.githubToken,
+    gistId: partial.gistId !== undefined ? partial.gistId : current.gistId,
+    lastSyncTime: partial.lastSyncTime !== undefined ? partial.lastSyncTime : current.lastSyncTime,
+    autoSync: partial.autoSync !== undefined ? partial.autoSync : current.autoSync,
+    syncOnAnalyze: partial.syncOnAnalyze !== undefined ? partial.syncOnAnalyze : current.syncOnAnalyze,
+  };
+  await browser.storage.local.set({ [STORAGE_KEYS_SYNC.SYNC_SETTINGS]: next });
+}
+
+export async function getConflictQueue(): Promise<ConflictRecord[]> {
+  const result = await browser.storage.local.get(STORAGE_KEYS_SYNC.CONFLICT_QUEUE);
+  const raw = result[STORAGE_KEYS_SYNC.CONFLICT_QUEUE];
+  if (!Array.isArray(raw)) return [];
+  return raw;
+}
+
+export async function setConflictQueue(conflicts: ConflictRecord[]): Promise<void> {
+  await browser.storage.local.set({ [STORAGE_KEYS_SYNC.CONFLICT_QUEUE]: conflicts });
+}
+
+export async function addConflict(conflict: ConflictRecord): Promise<void> {
+  const queue = await getConflictQueue();
+  const exists = queue.some(
+    (c) => c.local.id === conflict.local.id && c.local.url === conflict.local.url
+  );
+  if (!exists) {
+    await setConflictQueue([...queue, conflict]);
+  }
+}
+
+export async function removeConflict(id: string): Promise<void> {
+  const queue = await getConflictQueue();
+  await setConflictQueue(queue.filter((c) => c.local.id !== id));
+}
+
+export async function clearConflictQueue(): Promise<void> {
+  await browser.storage.local.set({ [STORAGE_KEYS_SYNC.CONFLICT_QUEUE]: [] });
+}
+
+export async function getSyncStatus(): Promise<SyncStatus> {
+  const settings = await getSyncSettings();
+  const conflicts = await getConflictQueue();
+  return {
+    isConfigured: settings.githubToken.length > 0 && settings.gistId !== null,
+    gistId: settings.gistId,
+    lastSyncTime: settings.lastSyncTime,
+    pendingConflicts: conflicts.length,
+    syncError: null,
+  };
+}
+
+export async function saveSyncHistory(history: AnalysisRecord[]): Promise<void> {
+  await browser.storage.local.set({ [STORAGE_KEYS.ANALYSIS_HISTORY]: history });
+}
+

@@ -73,6 +73,41 @@ const dict = {
     idiomsCount: 'idioms',
     syntaxCount: 'syntax',
     vocabularyCount: 'vocabulary',
+    githubSync: 'GitHub Sync',
+    githubSyncDesc: 'Sync your learning history with GitHub Gist for cross-device backup.',
+    githubToken: 'GitHub Token',
+    createGithubToken: 'Create a token',
+    tokenScopes: 'Required scopes:',
+    saveToken: 'Save Token',
+    gistUrl: 'Gist URL',
+    copyUrl: 'Copy URL',
+    autoSyncOnAnalyze: 'Auto-sync after each analysis',
+    syncUpload: 'Upload',
+    syncDownload: 'Download',
+    syncBidirectional: 'Sync',
+    lastSync: 'Last synced',
+    syncTokenEmpty: 'Token cannot be empty',
+    syncTokenInvalid: 'Invalid GitHub token',
+    syncTokenSaved: 'Token saved successfully',
+    syncPushed: (count: string) => `Uploaded ${count} records to Gist`,
+    syncPulled: (count: string) => `Downloaded ${count} new records`,
+    syncCompleted: 'Sync completed successfully',
+    syncFoundExisting: (pushed: string, pulled: string) => `Synced with existing Gist: uploaded ${pushed}, downloaded ${pulled} new records`,
+    syncCreatedNew: (count: string) => `Created new Gist and uploaded ${count} records`,
+    syncConflictsDetected: (count: string) => `${count} conflicts detected. Please resolve them in History.`,
+    syncConflictsPending: (count: string) => `${count} conflicts need to be resolved`,
+    syncFailed: 'Sync failed',
+    resolveConflicts: 'Resolve Conflicts',
+    conflictTitle: 'Conflict Detected',
+    conflictLocalModified: 'Local modified',
+    conflictRemoteModified: 'Remote modified',
+    keepLocal: 'Keep Local',
+    keepRemote: 'Keep Remote',
+    keepAllLocal: 'Keep All Local',
+    keepAllRemote: 'Keep All Remote',
+    conflictRecord: (title: string) => `"${title}"`,
+    conflictsExist: (count: string) => `${count} records have conflicts`,
+    resolveAllConflicts: 'Resolve All Conflicts',
   },
   zh: {
     appTitle: 'Nuance',
@@ -143,20 +178,62 @@ const dict = {
     idiomsCount: '个习语',
     syntaxCount: '个句法',
     vocabularyCount: '个词汇',
+    githubSync: 'GitHub 同步',
+    githubSyncDesc: '使用 GitHub Gist 同步学习历史，实现跨设备备份。',
+    githubToken: 'GitHub Token',
+    createGithubToken: '创建 Token',
+    tokenScopes: '所需权限：',
+    saveToken: '保存 Token',
+    gistUrl: 'Gist 链接',
+    copyUrl: '复制链接',
+    autoSyncOnAnalyze: '每次分析后自动同步',
+    syncUpload: '上传',
+    syncDownload: '下载',
+    syncBidirectional: '同步',
+    lastSync: '上次同步',
+    syncTokenEmpty: 'Token 不能为空',
+    syncTokenInvalid: '无效的 GitHub Token',
+    syncTokenSaved: 'Token 保存成功',
+    syncPushed: (count: string) => `已上传 ${count} 条记录到 Gist`,
+    syncPulled: (count: string) => `已下载 ${count} 条新记录`,
+    syncCompleted: '同步完成',
+    syncFoundExisting: (pushed: string, pulled: string) => `已同步现有 Gist：上传 ${pushed} 条，下载 ${pulled} 条新记录`,
+    syncCreatedNew: (count: string) => `已创建新 Gist 并上传 ${count} 条记录`,
+    syncConflictsDetected: (count: string) => `检测到 ${count} 个冲突，请在历史记录中解决。`,
+    syncConflictsPending: (count: string) => `有待解决的冲突 ${count} 个`,
+    syncFailed: '同步失败',
+    resolveConflicts: '解决冲突',
+    conflictTitle: '检测到冲突',
+    conflictLocalModified: '本地已修改',
+    conflictRemoteModified: '远程已修改',
+    keepLocal: '保留本地',
+    keepRemote: '保留远程',
+    keepAllLocal: '全部保留本地',
+    keepAllRemote: '全部保留远程',
+    conflictRecord: (title: string) => `「${title}」`,
+    conflictsExist: (count: string) => `${count} 条记录存在冲突`,
+    resolveAllConflicts: '解决所有冲突',
   },
 } as const;
 
 type DictKey = keyof typeof dict.en;
+type DictValue = string | ((arg1: string, arg2?: string) => string);
 
 interface I18nContextValue {
   lang: Lang;
-  t: (key: DictKey) => string;
+  t: (key: DictKey, arg1?: string, arg2?: string) => string;
   setLang: (lang: Lang) => void;
 }
 
 const I18nContext = createContext<I18nContextValue>({
   lang: 'en',
-  t: (k) => dict.en[k],
+  t: (k, arg1, arg2) => {
+    const value = dict.en[k];
+    if (typeof value === 'function') {
+      return value(arg1 || '', arg2 || '');
+    }
+    return value ?? k;
+  },
   setLang: () => {},
 });
 
@@ -180,7 +257,13 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   const t = useMemo(() => {
     const table = dict[lang];
-    return (key: DictKey) => table[key] ?? key;
+    return (key: DictKey, arg1?: string, arg2?: string) => {
+      const value = table[key];
+      if (typeof value === 'function') {
+        return value(arg1 || '', arg2 || '');
+      }
+      return value ?? key;
+    };
   }, [lang]);
 
   const value = useMemo(

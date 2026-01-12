@@ -1,6 +1,6 @@
 import { Clock, Globe, ExternalLink, Trash2, FileText, MessageSquare, BookOpen, Lightbulb } from 'lucide-react';
 import { useI18n } from '../i18n';
-import type { AnalysisRecord } from '@/lib/storage';
+import type { AnalysisRecord } from '@/lib/types';
 
 interface HistoryItemProps {
   record: AnalysisRecord;

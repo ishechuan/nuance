@@ -1,14 +1,23 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Key, CheckCircle, AlertCircle } from 'lucide-react';
-import { getApiKey, setApiKey, getSettings, setSettings } from '@/lib/storage';
+import { ArrowLeft, Key, CheckCircle, AlertCircle, RefreshCw, Github, Link, Copy, Check, Upload, Download } from 'lucide-react';
+import { getApiKey, setApiKey, getSettings, setSettings, getSyncSettings, setSyncSettings } from '@/lib/storage';
 import { useI18n } from '../i18n';
+import {
+  validateToken,
+  syncToGist,
+  syncFromGist,
+  syncBidirectional,
+  syncWithLookupOrCreate,
+  getSyncStatusInfo,
+} from '@/lib/github-sync';
 
 interface SettingsPanelProps {
   onBack: () => void;
   onSaved: () => void;
+  onSyncStatusChange?: () => void;
 }
 
-export function SettingsPanel({ onBack, onSaved }: SettingsPanelProps) {
+export function SettingsPanel({ onBack, onSaved, onSyncStatusChange }: SettingsPanelProps) {
   const { t, lang, setLang } = useI18n();
   const [apiKeyValue, setApiKeyValue] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -18,6 +27,19 @@ export function SettingsPanel({ onBack, onSaved }: SettingsPanelProps) {
   const [maxSyntax, setMaxSyntax] = useState<number>(10);
   const [maxVocabulary, setMaxVocabulary] = useState<number>(10);
   const [prefMessage, setPrefMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const [githubToken, setGithubToken] = useState('');
+  const [gistId, setGistId] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<{ status: string; message: string; conflictsCount: number; lastSyncText: string }>({
+    status: 'idle',
+    message: '',
+    conflictsCount: 0,
+    lastSyncText: '',
+  });
+  const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [autoSync, setAutoSync] = useState(true);
+  const [copiedGistUrl, setCopiedGistUrl] = useState(false);
 
   useEffect(() => {
     getApiKey().then((key) => {
@@ -35,6 +57,12 @@ export function SettingsPanel({ onBack, onSaved }: SettingsPanelProps) {
       setMaxSyntax(s.maxSyntax);
       setMaxVocabulary(s.maxVocabulary);
     });
+    getSyncSettings().then((syncSettings) => {
+      setGithubToken(syncSettings.githubToken);
+      setGistId(syncSettings.gistId);
+      setAutoSync(syncSettings.autoSync);
+    });
+    loadSyncStatus();
   }, []);
 
   const handleSave = async () => {
@@ -102,6 +130,102 @@ export function SettingsPanel({ onBack, onSaved }: SettingsPanelProps) {
       maxVocabulary,
     });
     setPrefMessage({ type: 'success', text: t('msgPreferencesSaved') });
+  };
+
+  const loadSyncStatus = async () => {
+    const status = await getSyncStatusInfo();
+    setSyncStatus(status);
+  };
+
+  const handleSaveGithubToken = async () => {
+    if (!githubToken.trim()) {
+      setSyncMessage({ type: 'error', text: t('syncTokenEmpty') });
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncMessage(null);
+
+    const isValid = await validateToken(githubToken.trim());
+    if (!isValid) {
+      setSyncMessage({ type: 'error', text: t('syncTokenInvalid') });
+      setIsSyncing(false);
+      return;
+    }
+
+    await setSyncSettings({
+      githubToken: githubToken.trim(),
+      autoSync,
+    });
+
+    setSyncMessage({ type: 'success', text: t('syncTokenSaved') });
+    setIsSyncing(false);
+    loadSyncStatus();
+    onSyncStatusChange?.();
+
+    handleSync('lookup-or-create');
+  };
+
+  const handleSync = async (direction: 'push' | 'pull' | 'bidirectional' | 'lookup-or-create') => {
+    setIsSyncing(true);
+    setSyncMessage(null);
+
+    try {
+      let result;
+      switch (direction) {
+        case 'push':
+          result = await syncToGist();
+          break;
+        case 'pull':
+          result = await syncFromGist();
+          break;
+        case 'bidirectional':
+          result = await syncBidirectional();
+          break;
+        case 'lookup-or-create':
+          result = await syncWithLookupOrCreate();
+          break;
+      }
+
+      if (result.success) {
+        if (result.conflicts && result.conflicts.length > 0) {
+          setSyncMessage({ type: 'info', text: t('syncConflictsDetected', result.conflicts.length.toString()) });
+        } else {
+          const messages: Record<string, string> = {
+            push: t('syncPushed', result.pushed?.toString() || '0'),
+            pull: t('syncPulled', result.pulled?.toString() || '0'),
+            bidirectional: t('syncCompleted'),
+            'lookup-or-create': result.pulled && result.pulled > 0
+              ? t('syncFoundExisting', result.pushed?.toString() || '0', result.pulled.toString())
+              : t('syncCreatedNew', result.pushed?.toString() || '0'),
+          };
+          setSyncMessage({ type: 'success', text: messages[direction] });
+        }
+        await loadSyncStatus();
+        onSyncStatusChange?.();
+      } else {
+        setSyncMessage({ type: 'error', text: result.error || t('syncFailed') });
+      }
+    } catch (error) {
+      setSyncMessage({ type: 'error', text: t('syncFailed') });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleCopyGistUrl = () => {
+    if (gistId) {
+      const url = `https://gist.github.com/${gistId}`;
+      navigator.clipboard.writeText(url);
+      setCopiedGistUrl(true);
+      setTimeout(() => setCopiedGistUrl(false), 2000);
+    }
+  };
+
+  const handleToggleAutoSync = async () => {
+    const newValue = !autoSync;
+    setAutoSync(newValue);
+    await setSyncSettings({ autoSync: newValue });
   };
 
   return (
@@ -257,6 +381,140 @@ export function SettingsPanel({ onBack, onSaved }: SettingsPanelProps) {
           >
             {t('savePreferences')}
           </button>
+        </section>
+
+        <section className="settings-section">
+          <h3>
+            <Github size={16} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+            {t('githubSync')}
+          </h3>
+
+          <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
+            {t('githubSyncDesc')}
+          </div>
+
+          {syncStatus.conflictsCount > 0 && (
+            <div className="message warning fade-in">
+              <AlertCircle size={16} />
+              {t('syncConflictsPending', syncStatus.conflictsCount.toString())}
+            </div>
+          )}
+
+          {syncMessage && (
+            <div className={`message ${syncMessage.type} fade-in`}>
+              {syncMessage.type === 'success' ? (
+                <CheckCircle size={16} />
+              ) : syncMessage.type === 'error' ? (
+                <AlertCircle size={16} />
+              ) : (
+                <RefreshCw size={16} className="spinning" />
+              )}
+              {syncMessage.text}
+            </div>
+          )}
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="githubToken">
+              {t('githubToken')}
+            </label>
+            <input
+              id="githubToken"
+              type="password"
+              className="form-input"
+              placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+              value={githubToken}
+              onChange={(e) => setGithubToken(e.target.value)}
+            />
+            <p className="form-hint">
+              <a
+                href="https://github.com/settings/tokens"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {t('createGithubToken')}
+              </a>
+              {' - '}{t('tokenScopes')} <code>gist</code>
+            </p>
+          </div>
+
+          <button
+            className="btn-primary btn-save"
+            onClick={handleSaveGithubToken}
+            disabled={isSyncing}
+          >
+            {isSyncing ? t('saving') : t('saveToken')}
+          </button>
+
+          {gistId && (
+            <>
+              <div className="form-group" style={{ marginTop: 16 }}>
+                <label className="form-label">
+                  <Link size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+                  {t('gistUrl')}
+                </label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={`https://gist.github.com/${gistId}`}
+                    readOnly
+                    style={{ flex: 1, fontSize: 12 }}
+                  />
+                  <button
+                    className="btn-secondary"
+                    onClick={handleCopyGistUrl}
+                    title={t('copyUrl')}
+                  >
+                    {copiedGistUrl ? <Check size={16} /> : <Copy size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginTop: 12 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={autoSync}
+                    onChange={handleToggleAutoSync}
+                  />
+                  <span>{t('autoSyncOnAnalyze')}</span>
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                <button
+                  className="btn-secondary"
+                  onClick={() => handleSync('push')}
+                  disabled={isSyncing}
+                >
+                  <Upload size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+                  {t('syncUpload')}
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => handleSync('pull')}
+                  disabled={isSyncing}
+                >
+                  <Download size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+                  {t('syncDownload')}
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => handleSync('bidirectional')}
+                  disabled={isSyncing}
+                >
+                  <RefreshCw size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+                  {t('syncBidirectional')}
+                </button>
+              </div>
+
+              {syncStatus.lastSyncText && (
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 12 }}>
+                  {t('lastSync')}: {syncStatus.lastSyncText}
+                </p>
+              )}
+            </>
+          )}
         </section>
 
         <section className="settings-section">

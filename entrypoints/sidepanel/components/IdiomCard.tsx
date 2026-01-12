@@ -1,4 +1,4 @@
-import type { IdiomItem } from '@/lib/storage';
+import type { IdiomItem } from '@/lib/types';
 
 interface IdiomCardProps {
   item: IdiomItem;

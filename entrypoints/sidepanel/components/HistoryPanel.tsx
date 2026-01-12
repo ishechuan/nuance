@@ -1,17 +1,21 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, Search, Trash2, Download, FileText, Clock, Globe } from 'lucide-react';
+import { ArrowLeft, Search, Trash2, Download, FileText, Clock, Globe, AlertTriangle, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { useI18n } from '../i18n';
-import { getAnalysisHistory, clearAnalysisHistory, deleteAnalysisRecord, type AnalysisRecord } from '@/lib/storage';
+import { getAnalysisHistory, clearAnalysisHistory, deleteAnalysisRecord, getConflictQueue, removeConflict } from '@/lib/storage';
+import type { AnalysisRecord } from '@/lib/types';
+import { resolveConflict, resolveAllConflicts } from '@/lib/github-sync';
 import { HistoryItem } from './HistoryItem';
 import { HistoryDetailView } from './HistoryDetailView';
+import type { ConflictRecord } from '@/lib/types';
 
 interface HistoryPanelProps {
   onBack: () => void;
+  onConflictsChange?: () => void;
 }
 
 type DateFilter = 'all' | 'today' | 'week' | 'month';
 
-export function HistoryPanel({ onBack }: HistoryPanelProps) {
+export function HistoryPanel({ onBack, onConflictsChange }: HistoryPanelProps) {
   const { t, lang } = useI18n();
   const [records, setRecords] = useState<AnalysisRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -19,9 +23,13 @@ export function HistoryPanel({ onBack }: HistoryPanelProps) {
   const [selectedRecord, setSelectedRecord] = useState<AnalysisRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [conflicts, setConflicts] = useState<ConflictRecord[]>([]);
+  const [showConflictModal, setShowConflictModal] = useState(false);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadHistory();
+    loadConflicts();
   }, []);
 
   const loadHistory = async () => {
@@ -34,6 +42,12 @@ export function HistoryPanel({ onBack }: HistoryPanelProps) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const loadConflicts = async () => {
+    const conflictQueue = await getConflictQueue();
+    setConflicts(conflictQueue);
+    onConflictsChange?.();
   };
 
   const filteredRecords = useMemo(() => {
@@ -88,6 +102,30 @@ export function HistoryPanel({ onBack }: HistoryPanelProps) {
       setRecords(updated);
     } catch (error) {
       console.error('Failed to delete record:', error);
+    }
+  };
+
+  const handleResolveConflict = async (id: string, prefer: 'local' | 'remote') => {
+    setResolvingId(id);
+    try {
+      await resolveConflict(id, prefer);
+      await loadConflicts();
+      await loadHistory();
+    } catch (error) {
+      console.error('Failed to resolve conflict:', error);
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
+  const handleResolveAll = async (prefer: 'local' | 'remote') => {
+    try {
+      await resolveAllConflicts(prefer);
+      await loadConflicts();
+      await loadHistory();
+      setShowConflictModal(false);
+    } catch (error) {
+      console.error('Failed to resolve all conflicts:', error);
     }
   };
 
@@ -168,6 +206,16 @@ export function HistoryPanel({ onBack }: HistoryPanelProps) {
         </div>
       </header>
 
+      {conflicts.length > 0 && (
+        <div className="conflict-banner fade-in">
+          <AlertTriangle size={16} />
+          <span>{t('conflictsExist', conflicts.length.toString())}</span>
+          <button className="btn-resolve" onClick={() => setShowConflictModal(true)}>
+            {t('resolveConflicts')}
+          </button>
+        </div>
+      )}
+
       <div className="content">
         {isLoading ? (
           <div className="loading">
@@ -238,6 +286,73 @@ export function HistoryPanel({ onBack }: HistoryPanelProps) {
                     onDelete={handleDelete}
                   />
                 ))}
+              </div>
+            )}
+
+            {showConflictModal && (
+              <div className="modal-overlay" onClick={() => setShowConflictModal(false)}>
+                <div className="modal modal-large" onClick={(e) => e.stopPropagation()}>
+                  <div className="modal-header">
+                    <AlertTriangle size={20} className="modal-icon warning" />
+                    <h3>{t('resolveConflicts')}</h3>
+                  </div>
+                  <div className="modal-body">
+                    {conflicts.map((conflict) => (
+                      <div key={conflict.local.id} className="conflict-item">
+                        <div className="conflict-title">{t('conflictRecord', conflict.local.title)}</div>
+                        <div className="conflict-meta">
+                          <span className="conflict-local">
+                            <CheckCircle size={12} />
+                            {new Date(conflict.localTimestamp).toLocaleString()}
+                          </span>
+                          <span className="conflict-remote">
+                            <XCircle size={12} />
+                            {new Date(conflict.remoteTimestamp).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="conflict-actions">
+                          <button
+                            className="btn-small btn-secondary"
+                            onClick={() => handleResolveConflict(conflict.local.id, 'local')}
+                            disabled={resolvingId === conflict.local.id}
+                          >
+                            {t('keepLocal')}
+                          </button>
+                          <button
+                            className="btn-small btn-secondary"
+                            onClick={() => handleResolveConflict(conflict.local.id, 'remote')}
+                            disabled={resolvingId === conflict.local.id}
+                          >
+                            {t('keepRemote')}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="modal-actions">
+                    <button
+                      className="btn-secondary"
+                      onClick={() => handleResolveAll('local')}
+                      disabled={resolvingId !== null}
+                    >
+                      {t('keepAllLocal')}
+                    </button>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => handleResolveAll('remote')}
+                      disabled={resolvingId !== null}
+                    >
+                      {t('keepAllRemote')}
+                    </button>
+                    <button
+                      className="btn-primary"
+                      onClick={() => setShowConflictModal(false)}
+                      disabled={resolvingId !== null}
+                    >
+                      {t('cancel')}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
