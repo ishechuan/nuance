@@ -119,6 +119,15 @@ const dict = {
     conflictRecord: (title: string) => `"${title}"`,
     conflictsExist: (count: string) => `${count} records have conflicts`,
     resolveAllConflicts: 'Resolve All Conflicts',
+    contextMenuAnalyze: 'Nuance AI Analysis',
+    contextMenuAddVocab: 'Add to Vocabulary',
+    contextMenuAddIdiom: 'Add to Idioms',
+    contextMenuAddSyntax: 'Add to Syntax',
+    analysisResult: 'AI Analysis Result',
+    selectedText: 'Selected Text',
+    analyzingSelection: 'Analyzing...',
+    addTo: (category: string) => `Add to ${category}`,
+    customAdd: 'Custom Add',
   },
   zh: {
     appTitle: 'Nuance',
@@ -235,10 +244,19 @@ const dict = {
     conflictRecord: (title: string) => `「${title}」`,
     conflictsExist: (count: string) => `${count} 条记录存在冲突`,
     resolveAllConflicts: '解决所有冲突',
+    contextMenuAnalyze: 'Nuance AI 分析',
+    contextMenuAddVocab: '添加到词汇',
+    contextMenuAddIdiom: '添加到习语',
+    contextMenuAddSyntax: '添加到语法',
+    analysisResult: 'AI 分析结果',
+    selectedText: '选中的文本',
+    analyzingSelection: '正在分析...',
+    addTo: (category: string) => `添加到 ${category}`,
+    customAdd: '自定义添加',
   },
 } as const;
 
-type DictKey = keyof typeof dict.en;
+type DictKey = keyof typeof dict.en | keyof typeof dict.zh;
 type DictValue = string | ((arg1: string, arg2?: string) => string);
 
 interface I18nContextValue {

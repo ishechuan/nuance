@@ -47,12 +47,14 @@ export interface IdiomItem {
   expression: string;
   meaning: string;
   example: string;
+  isCustom?: boolean;
 }
 
 export interface SyntaxItem {
   sentence: string;
   structure: string;
   explanation: string;
+  isCustom?: boolean;
 }
 
 export interface VocabularyItem {
@@ -60,6 +62,7 @@ export interface VocabularyItem {
   level: 'B1' | 'B2' | 'C1' | 'C2';
   definition: string;
   context: string;
+  isCustom?: boolean;
 }
 
 export interface GistHistoryData {

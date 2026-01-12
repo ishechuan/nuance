@@ -77,3 +77,63 @@ export function buildAnalysisPrompt(
     `\n附加约束：\n- 词汇仅选择等级为：${levels}\n- 每个类别最多返回：习语${mi}条、语法${ms}条、词汇${mv}条\n`;
   return ANALYSIS_USER_PROMPT + constraints + truncatedText;
 }
+
+export function buildSelectionAnalysisPrompt(
+  text: string,
+  category: 'vocabulary' | 'idioms' | 'syntax'
+): string {
+  const prompts: Record<string, string> = {
+    vocabulary: `分析以下选中的英文文本，提取词汇信息：
+
+文本："${text}"
+
+请返回JSON格式：
+{
+  "word": "提取的核心单词（如果文本较短，直接使用整个文本）",
+  "level": "B1/B2/C1/C2（根据词汇难度）",
+  "definition": "该语境下的中文释义",
+  "context": "原文句子作为例句"
+}
+
+要求：
+- 优先提取最有学习价值的单词
+- 如果文本是单个单词，直接分析该单词
+- definition要结合上下文给出准确释义
+- 所有解释使用中文`,
+
+    idioms: `分析以下选中的英文文本，提取习语/短语表达：
+
+文本："${text}"
+
+请返回JSON格式：
+{
+  "expression": "提取的短语/习语",
+  "meaning": "中文解释",
+  "example": "原文句子"
+}
+
+要求：
+- 识别地道的英语表达
+- 优先提取短语动词、习语、固定搭配
+- 解释要简洁准确
+- 所有解释使用中文`,
+
+    syntax: `分析以下选中的英文文本，提取句型/语法结构：
+
+文本："${text}"
+
+请返回JSON格式：
+{
+  "sentence": "原文句子",
+  "structure": "语法结构名称（如'倒装句'、'定语从句'、'分词短语'等）",
+  "explanation": "中文语法解析"
+}
+
+要求：
+- 识别复杂或值得学习的句型
+- 解释要清晰易懂
+- 所有解释使用中文`,
+  };
+
+  return prompts[category] || prompts.vocabulary;
+}

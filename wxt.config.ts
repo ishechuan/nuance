@@ -6,7 +6,7 @@ export default defineConfig({
   manifest: {
     name: 'Nuance',
     description: 'AI-powered English learning assistant - Extract, Analyze, Master',
-    permissions: ['storage', 'activeTab', 'sidePanel'],
+    permissions: ['storage', 'activeTab', 'sidePanel', 'contextMenus'],
     host_permissions: ['https://api.deepseek.com/*', 'https://api.github.com/*'],
     content_security_policy: {
       extension_pages:

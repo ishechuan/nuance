@@ -14,6 +14,18 @@ export function SyntaxCard({ item, isHighlighted, onHighlight }: SyntaxCardProps
     >
       <div className="card-header">
         <span className="card-structure">{item.structure}</span>
+        {item.isCustom && (
+          <span style={{
+            fontSize: 10,
+            padding: '2px 6px',
+            borderRadius: 4,
+            background: 'var(--accent-info)',
+            color: 'white',
+            fontWeight: 600,
+          }}>
+            自定义
+          </span>
+        )}
       </div>
       <div className="card-context mb-3">
         "{item.sentence}"

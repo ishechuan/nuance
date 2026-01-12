@@ -5,9 +5,10 @@ import { HistoryPanel } from './components/HistoryPanel';
 import { IdiomCard } from './components/IdiomCard';
 import { SyntaxCard } from './components/SyntaxCard';
 import { VocabularyCard } from './components/VocabularyCard';
-import { hasApiKey, addAnalysisRecord } from '@/lib/storage';
+import { SelectionAnalysisModal } from './components/SelectionAnalysisModal';
+import { hasApiKey, addAnalysisRecord, updateAnalysisRecord, getAnalysisHistory, findAnalysisByUrl } from '@/lib/storage';
 import type { AnalysisResult, IdiomItem, SyntaxItem, VocabularyItem } from '@/lib/types';
-import type { ExtractContentResponse, AnalyzeTextResponse } from '@/lib/messages';
+import type { ExtractContentResponse, AnalyzeTextResponse, AnalyzeSelectionResponse } from '@/lib/messages';
 import { useI18n } from './i18n';
 import { syncAfterAnalysis, getSyncStatusInfo } from '@/lib/github-sync';
 import { getConflictQueue } from '@/lib/storage';
@@ -19,6 +20,13 @@ interface ArticleInfo {
   title: string;
   url: string;
   textContent: string;
+}
+
+interface SelectionAnalysisState {
+  open: boolean;
+  selection: string;
+  targetCategory: 'vocabulary' | 'idioms' | 'syntax';
+  tabId: number | null;
 }
 
 function App() {
@@ -36,12 +44,13 @@ function App() {
     message: '',
     conflictsCount: 0,
   });
-
-  // Check API key on mount
-  useEffect(() => {
-    hasApiKey().then(setHasKey);
-    loadSyncStatus();
-  }, []);
+  const [currentRecordId, setCurrentRecordId] = useState<string | null>(null);
+  const [selectionAnalysis, setSelectionAnalysis] = useState<SelectionAnalysisState>({
+    open: false,
+    selection: '',
+    targetCategory: 'vocabulary',
+    tabId: null,
+  });
 
   const loadSyncStatus = async () => {
     const conflicts = await getConflictQueue();
@@ -52,6 +61,97 @@ function App() {
       conflictsCount: conflicts.length,
     });
   };
+
+  // Check current tab and load history if available
+  const checkCurrentTab = async (overrideUrl?: string) => {
+    try {
+      let url: string | undefined;
+      
+      if (overrideUrl) {
+        url = overrideUrl;
+      } else {
+        const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+        url = tabs[0]?.url;
+      }
+      
+      if (!url) return;
+      
+      const record = await findAnalysisByUrl(url);
+      if (record) {
+        setArticle({
+          title: record.title,
+          url: record.url,
+          textContent: '',
+        });
+        setAnalysis(record.analysis);
+        setCurrentRecordId(record.id);
+      } else {
+        setArticle(null);
+        setAnalysis(null);
+        setCurrentRecordId(null);
+      }
+    } catch (error) {
+      console.error('Failed to check current tab:', error);
+    }
+  };
+
+  // Listen for tab activation changes
+  const handleTabActivated = async () => {
+    if (!isLoading) {
+      await checkCurrentTab();
+    }
+  };
+  
+  // Listen for URL changes in the current tab
+  const handleTabUpdated = async (tabId: number, changeInfo: { status?: string }, tab: { url?: string }) => {
+    if (changeInfo.status === 'complete' && tab.url && !isLoading) {
+      await checkCurrentTab(tab.url);
+    }
+  };
+
+  // Check API key on mount and setup tab listeners
+  useEffect(() => {
+    hasApiKey().then(setHasKey);
+    loadSyncStatus();
+    
+    // Auto-load history for current tab
+    checkCurrentTab();
+    
+    // Update context menus with current language
+    browser.runtime.sendMessage({
+      type: 'UPDATE_CONTEXT_MENUS',
+      language: lang,
+    });
+    
+    // Add tab event listeners
+    browser.tabs.onActivated.addListener(handleTabActivated);
+    browser.tabs.onUpdated.addListener(handleTabUpdated);
+    
+    // Remove tab event listeners on cleanup
+    return () => {
+      browser.tabs.onActivated.removeListener(handleTabActivated);
+      browser.tabs.onUpdated.removeListener(handleTabUpdated);
+    };
+  }, [lang, isLoading]);
+
+  // Listen for messages from background script
+  useEffect(() => {
+    const handleMessage = (message: { type: string; selection?: string; targetCategory?: 'vocabulary' | 'idioms' | 'syntax'; tabId?: number }) => {
+      if (message.type === 'SHOW_SELECTION_ANALYSIS' && message.selection && message.targetCategory) {
+        setSelectionAnalysis({
+          open: true,
+          selection: message.selection,
+          targetCategory: message.targetCategory,
+          tabId: message.tabId || null,
+        });
+      }
+    };
+
+    browser.runtime.onMessage.addListener(handleMessage);
+    return () => {
+      browser.runtime.onMessage.removeListener(handleMessage);
+    };
+  }, []);
 
   // Extract content from current page
   const extractContent = useCallback(async () => {
@@ -113,8 +213,18 @@ function App() {
             url: articleData.url,
             analysis: response.data,
           });
+          
+          const history = await getAnalysisHistory();
+          const record = history.find(r => r.url === articleData.url && r.title === articleData.title);
+          if (record) {
+            setCurrentRecordId(record.id);
+          }
+          
           await syncAfterAnalysis();
           await loadSyncStatus();
+          
+          // Re-check current tab to ensure data is up to date
+          await checkCurrentTab();
         } catch (error) {
           console.error('Failed to save analysis record:', error);
         }
@@ -152,6 +262,47 @@ function App() {
     setHasKey(true);
     setView('main');
   }, []);
+
+  // Analyze selected text from right-click menu
+  const analyzeSelection = useCallback(async (
+    text: string,
+    category: 'vocabulary' | 'idioms' | 'syntax'
+  ): Promise<AnalyzeSelectionResponse> => {
+    return await browser.runtime.sendMessage({
+      type: 'ANALYZE_SELECTION',
+      text,
+      category,
+    });
+  }, []);
+
+  // Handle adding item from selection analysis
+  const handleAddFromSelection = useCallback(async (item: VocabularyItem | IdiomItem | SyntaxItem) => {
+    if (!analysis) return;
+
+    let category: 'vocabulary' | 'idioms' | 'syntax';
+    if ('word' in item) category = 'vocabulary';
+    else if ('expression' in item) category = 'idioms';
+    else category = 'syntax';
+
+    const updatedAnalysis: AnalysisResult = {
+      idioms: category === 'idioms' ? [...analysis.idioms, item as IdiomItem] : analysis.idioms,
+      syntax: category === 'syntax' ? [...analysis.syntax, item as SyntaxItem] : analysis.syntax,
+      vocabulary: category === 'vocabulary' ? [...analysis.vocabulary, item as VocabularyItem] : analysis.vocabulary,
+    };
+
+    setAnalysis(updatedAnalysis);
+    setSelectionAnalysis(prev => ({ ...prev, open: false }));
+
+    try {
+      if (currentRecordId) {
+        await updateAnalysisRecord(currentRecordId, { analysis: updatedAnalysis });
+        await syncAfterAnalysis();
+        await loadSyncStatus();
+      }
+    } catch (error) {
+      console.error('Failed to update record:', error);
+    }
+  }, [analysis, currentRecordId]);
 
   // Render history view
   if (view === 'history') {
@@ -343,6 +494,16 @@ function App() {
               {t('loadingMayTake')}
             </span>
           </div>
+        )}
+
+        {selectionAnalysis.open && (
+          <SelectionAnalysisModal
+            selection={selectionAnalysis.selection}
+            targetCategory={selectionAnalysis.targetCategory}
+            onAnalyze={analyzeSelection}
+            onAdd={handleAddFromSelection}
+            onClose={() => setSelectionAnalysis(prev => ({ ...prev, open: false }))}
+          />
         )}
       </div>
     </div>

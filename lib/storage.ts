@@ -59,6 +59,23 @@ export async function addAnalysisRecord(record: Omit<AnalysisRecord, 'id' | 'tim
   await browser.storage.local.set({ [STORAGE_KEYS.ANALYSIS_HISTORY]: updatedHistory });
 }
 
+export async function updateAnalysisRecord(id: string, updates: Partial<AnalysisRecord>): Promise<void> {
+  const history = await getAnalysisHistory();
+  const index = history.findIndex((record) => record.id === id);
+  
+  if (index === -1) {
+    throw new Error(`Record with id ${id} not found`);
+  }
+  
+  const updatedHistory = [
+    ...history.slice(0, index),
+    { ...history[index], ...updates },
+    ...history.slice(index + 1),
+  ];
+  
+  await browser.storage.local.set({ [STORAGE_KEYS.ANALYSIS_HISTORY]: updatedHistory });
+}
+
 export async function clearAnalysisHistory(): Promise<void> {
   await browser.storage.local.set({ [STORAGE_KEYS.ANALYSIS_HISTORY]: [] });
 }
@@ -67,6 +84,11 @@ export async function deleteAnalysisRecord(id: string): Promise<void> {
   const history = await getAnalysisHistory();
   const updatedHistory = history.filter((record) => record.id !== id);
   await browser.storage.local.set({ [STORAGE_KEYS.ANALYSIS_HISTORY]: updatedHistory });
+}
+
+export async function findAnalysisByUrl(url: string): Promise<AnalysisRecord | null> {
+  const history = await getAnalysisHistory();
+  return history.find(r => r.url === url) || null;
 }
 
 export async function getSettings(): Promise<UserSettings> {
