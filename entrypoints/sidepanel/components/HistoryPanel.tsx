@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, Search, Trash2, Download, FileText, AlertTriangle, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Search, Trash2, Download, FileText, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 import { useI18n } from '../i18n';
-import { getAnalysisHistory, clearAnalysisHistory, deleteAnalysisRecord, getConflictQueue, removeConflict } from '@/lib/storage';
+import { getAnalysisHistory, clearAnalysisHistory, deleteAnalysisRecord, getConflictQueue } from '@/lib/storage';
 import type { AnalysisRecord } from '@/lib/types';
 import { resolveConflict, resolveAllConflicts } from '@/lib/github-sync';
 import { HistoryItem } from './HistoryItem';
@@ -149,24 +149,45 @@ export function HistoryPanel({ onBack, onConflictsChange }: HistoryPanelProps) {
     }
   };
 
-  const handleExportJson = () => {
-    const dataStr = JSON.stringify(records, null, 2);
+  const exportJson = (recordsToExport: AnalysisRecord[], filenamePrefix = 'nuance-history') => {
+    const dataStr = JSON.stringify(recordsToExport, null, 2);
     const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `nuance-history-${Date.now()}.json`;
+    a.download = `${filenamePrefix}-${Date.now()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
-  const handleExportCsv = () => {
+  const handleExportJson = () => {
+    exportJson(records);
+  };
+
+  const escapeCsvField = (value: string): string => {
+    if (value == null) return '';
+    
+    // 防御CSV注入：公式前缀转义
+    if (/^[=+\-@]/.test(value)) {
+      value = '\t' + value;  // 添加制表符前缀，Excel仍显示原值但阻止公式执行
+    }
+    
+    // 转义内部双引号
+    value = value.replace(/"/g, '""');
+    
+    // 检查是否需要引号包装（包含逗号、换行符、双引号或首尾空格）
+    const needsQuotes = /[,\r\n"]/.test(value) || /^\s|\s$/.test(value);
+    
+    return needsQuotes ? `"${value}"` : value;
+  };
+
+  const exportCsv = (recordsToExport: AnalysisRecord[], filenamePrefix = 'nuance-history') => {
     const headers = ['Title', 'URL', 'Date', 'Idioms', 'Syntax', 'Vocabulary'];
-    const rows = records.map((r) => [
-      `"${r.title.replace(/"/g, '""')}"`,
-      `"${r.url}"`,
+    const rows = recordsToExport.map((r) => [
+      escapeCsvField(r.title),
+      escapeCsvField(r.url),
       new Date(r.timestamp).toISOString(),
       r.analysis.idioms.length,
       r.analysis.syntax.length,
@@ -177,23 +198,27 @@ export function HistoryPanel({ onBack, onConflictsChange }: HistoryPanelProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `nuance-history-${Date.now()}.csv`;
+    a.download = `${filenamePrefix}-${Date.now()}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
-  const getUniqueDomains = () => {
-    const domains = new Set<string>();
-    records.forEach((record) => {
-      try {
-        domains.add(new URL(record.url).hostname);
-      } catch {
-        // ignore invalid URLs
-      }
-    });
-    return Array.from(domains).sort();
+  const handleExportCsv = () => {
+    exportCsv(records);
+  };
+
+  const handleExportSearchJson = () => {
+    const searchRecordIds = new Set(searchResults.map(r => r.recordId));
+    const filteredRecords = records.filter(r => searchRecordIds.has(r.id));
+    exportJson(filteredRecords, 'nuance-search-results');
+  };
+
+  const handleExportSearchCsv = () => {
+    const searchRecordIds = new Set(searchResults.map(r => r.recordId));
+    const filteredRecords = records.filter(r => searchRecordIds.has(r.id));
+    exportCsv(filteredRecords, 'nuance-search-results');
   };
 
   if (selectedRecord) {
@@ -242,6 +267,13 @@ export function HistoryPanel({ onBack, onConflictsChange }: HistoryPanelProps) {
             <Download size={16} />
           </button>
           <button
+            className="icon-btn-small"
+            onClick={handleExportCsv}
+            title={t('exportCsv')}
+          >
+            <Download size={16} />
+          </button>
+          <button
             className="icon-btn-small icon-btn-danger"
             onClick={() => setShowClearConfirm(true)}
             title={t('clearHistory')}
@@ -284,6 +316,24 @@ export function HistoryPanel({ onBack, onConflictsChange }: HistoryPanelProps) {
             className="form-input"
             autoFocus
           />
+        </div>
+        <div className="history-actions">
+          <button
+            className="icon-btn-small"
+            onClick={handleExportSearchJson}
+            title={t('exportJson')}
+            disabled={searchResults.length === 0}
+          >
+            <Download size={16} />
+          </button>
+          <button
+            className="icon-btn-small"
+            onClick={handleExportSearchCsv}
+            title={t('exportCsv')}
+            disabled={searchResults.length === 0}
+          >
+            <Download size={16} />
+          </button>
         </div>
       </div>
       <SearchResults
