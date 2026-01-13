@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Sparkles, Loader2 } from 'lucide-react';
 import type { VocabularyItem, IdiomItem, SyntaxItem } from '@/lib/types';
 import type { AnalyzeSelectionResponse } from '@/lib/messages';
@@ -7,9 +7,16 @@ import { formatErrorMessage, useI18n } from '../i18n';
 interface SelectionAnalysisModalProps {
   selection: string;
   targetCategory: 'vocabulary' | 'idioms' | 'syntax';
-  onAnalyze: (text: string, category: 'vocabulary' | 'idioms' | 'syntax') => Promise<AnalyzeSelectionResponse>;
+  onAnalyze: (text: string, category: 'vocabulary' | 'idioms' | 'syntax', requestId?: string) => Promise<AnalyzeSelectionResponse>;
   onAdd: (item: VocabularyItem | IdiomItem | SyntaxItem) => void;
   onClose: () => void;
+  onAnalysisComplete?: (result: {
+    selection: string;
+    targetCategory: 'vocabulary' | 'idioms' | 'syntax';
+    success: boolean;
+    data?: AnalyzeSelectionResponse['data'];
+    error?: string;
+  }) => void;
 }
 
 export function SelectionAnalysisModal({
@@ -18,24 +25,93 @@ export function SelectionAnalysisModal({
   onAnalyze,
   onAdd,
   onClose,
+  onAnalysisComplete,
 }: SelectionAnalysisModalProps) {
   const { t } = useI18n();
   const [analyzing, setAnalyzing] = useState(true);
   const [analysisResult, setAnalysisResult] = useState<AnalyzeSelectionResponse['data'] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
+
+  const isMounted = useRef(false);
+  const currentRequestIdRef = useRef<string | null>(null);
+  const analyzingRef = useRef(false);
+  const userCancelledRef = useRef(false);
 
   useEffect(() => {
-    const analyze = async () => {
-      const response = await onAnalyze(selection, targetCategory);
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const requestId = generateRequestId();
+    setRequestId(requestId);
+    currentRequestIdRef.current = requestId;
+
+    userCancelledRef.current = false;
+    analyzingRef.current = true;
+    setAnalyzing(true);
+    setError(null);
+    setAnalysisResult(null);
+
+    (async () => {
+      const response = await onAnalyze(selection, targetCategory, requestId);
+
+      if (!isMounted.current) {
+        if (onAnalysisComplete && response.errorCode !== 'ANALYSIS_CANCELLED') {
+          onAnalysisComplete({
+            selection,
+            targetCategory,
+            success: response.success,
+            data: response.data,
+            error: response.success
+              ? undefined
+              : formatErrorMessage(t, response.errorCode, response.errorDetail, response.error),
+          });
+        }
+        return;
+      }
+
+      if (currentRequestIdRef.current !== requestId) return;
+
       if (response.success && response.data) {
         setAnalysisResult(response.data);
-      } else {
+      } else if (response.errorCode !== 'ANALYSIS_CANCELLED') {
         setError(formatErrorMessage(t, response.errorCode, response.errorDetail, response.error));
       }
+
+      analyzingRef.current = false;
       setAnalyzing(false);
-    };
-    analyze();
-  }, [selection, targetCategory, onAnalyze]);
+      setRequestId(null);
+      currentRequestIdRef.current = null;
+    })().catch((err) => {
+      if (!isMounted.current) return;
+      if (currentRequestIdRef.current !== requestId) return;
+      setError(formatErrorMessage(t, 'UNKNOWN_ERROR', err instanceof Error ? err.message : String(err)));
+      analyzingRef.current = false;
+      setAnalyzing(false);
+      setRequestId(null);
+      currentRequestIdRef.current = null;
+    });
+  }, [selection, targetCategory, onAnalyze, t, onAnalysisComplete]);
+
+  const generateRequestId = () => {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  };
+
+  const handleClose = useCallback(() => {
+    if (analyzingRef.current && onAnalysisComplete && !userCancelledRef.current) {
+      onAnalysisComplete({
+        selection,
+        targetCategory,
+        success: false,
+        error: 'BACKGROUND_ANALYSIS',
+      });
+    }
+    onClose();
+  }, [onAnalysisComplete, onClose, selection, targetCategory]);
 
   const getCategoryLabel = (cat: 'vocabulary' | 'idioms' | 'syntax') => {
     switch (cat) {
@@ -82,13 +158,13 @@ export function SelectionAnalysisModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={handleClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <Sparkles size={20} style={{ color: 'var(--accent-primary)' }} />
           <h3>{t('analysisResult')}</h3>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             style={{
               marginLeft: 'auto',
               background: 'none',
@@ -106,12 +182,86 @@ export function SelectionAnalysisModal({
           <div className="loading">
             <Loader2 size={32} className="spinning" style={{ color: 'var(--accent-primary)' }} />
             <span className="loading-text">{t('analyzingSelection')}</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>{t('loadingMayTake')}</span>
+            <button
+              className="btn-cancel"
+              onClick={() => {
+                userCancelledRef.current = true;
+                if (requestId) {
+                  browser.runtime.sendMessage({
+                    type: 'CANCEL_ANALYSIS',
+                    requestId,
+                  }).catch(() => {});
+                }
+                handleClose();
+              }}
+              style={{
+                marginTop: 12,
+                padding: '4px 12px',
+                fontSize: 12,
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 4,
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+              }}
+            >
+              {t('cancel')}
+            </button>
           </div>
-        ) : error ? (
-          <div className="message error">
-            {error}
-          </div>
-        ) : analysisResult ? (
+         ) : error ? (
+           <div className="message error">
+             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+               <span>{error}</span>
+               <button
+                 className="btn-secondary"
+                  onClick={() => {
+                    setError(null);
+                    setAnalyzing(true);
+                    analyzingRef.current = true;
+                    userCancelledRef.current = false;
+                    const requestId = generateRequestId();
+                    setRequestId(requestId);
+                    currentRequestIdRef.current = requestId;
+                    onAnalyze(selection, targetCategory, requestId).then(response => {
+                      if (!isMounted.current) return;
+                      if (currentRequestIdRef.current !== requestId) return;
+                      
+                      if (response.success && response.data) {
+                        setAnalysisResult(response.data);
+                      } else {
+                        if (response.errorCode !== 'ANALYSIS_CANCELLED') {
+                          setError(formatErrorMessage(t, response.errorCode, response.errorDetail, response.error));
+                        }
+                      }
+                      setAnalyzing(false);
+                      setRequestId(null);
+                      currentRequestIdRef.current = null;
+                      analyzingRef.current = false;
+                    }).catch(err => {
+                      if (!isMounted.current) return;
+                      if (currentRequestIdRef.current !== requestId) return;
+                      
+                       setError(formatErrorMessage(t, 'UNKNOWN_ERROR', err instanceof Error ? err.message : String(err)));
+                       setAnalyzing(false);
+                       setRequestId(null);
+                       currentRequestIdRef.current = null;
+                       analyzingRef.current = false;
+                    });
+                  }}
+                 disabled={analyzing}
+                 style={{
+                   marginLeft: 12,
+                   padding: '4px 12px',
+                   fontSize: 12,
+                   whiteSpace: 'nowrap',
+                 }}
+               >
+                 Retry
+               </button>
+             </div>
+           </div>
+         ) : analysisResult ? (
           <>
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>

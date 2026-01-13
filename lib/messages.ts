@@ -7,6 +7,7 @@ export type MessageType =
   | 'HIGHLIGHT_TEXT'
   | 'CLEAR_HIGHLIGHTS'
   | 'ANALYZE_SELECTION'
+  | 'CANCEL_ANALYSIS'
   | 'SHOW_SELECTION_ANALYSIS';
 
 export type ErrorCode =
@@ -20,6 +21,7 @@ export type ErrorCode =
   | 'DEEPSEEK_INVALID_JSON'
   | 'DEEPSEEK_INVALID_FORMAT'
   | 'DEEPSEEK_ANALYSIS_FAILED'
+  | 'ANALYSIS_CANCELLED'
   | 'UNKNOWN_ERROR';
 
 export interface ExtractContentRequest {
@@ -42,6 +44,7 @@ export interface ExtractContentResponse {
 export interface AnalyzeTextRequest {
   type: 'ANALYZE_TEXT';
   text: string;
+  requestId?: string;
 }
 
 export interface AnalyzeTextResponse {
@@ -50,6 +53,7 @@ export interface AnalyzeTextResponse {
   error?: string;
   errorCode?: ErrorCode;
   errorDetail?: string;
+  requestId?: string;
 }
 
 export interface HighlightTextRequest {
@@ -74,10 +78,22 @@ export interface ClearHighlightsResponse {
   errorDetail?: string;
 }
 
+export interface CancelAnalysisRequest {
+  type: 'CANCEL_ANALYSIS';
+  requestId: string;
+}
+
+export interface CancelAnalysisResponse {
+  success: boolean;
+  errorCode?: ErrorCode;
+  errorDetail?: string;
+}
+
 export interface AnalyzeSelectionRequest {
   type: 'ANALYZE_SELECTION';
   text: string;
   category: 'vocabulary' | 'idioms' | 'syntax';
+  requestId?: string;
 }
 
 export interface AnalyzeSelectionResponse {
@@ -101,6 +117,7 @@ export interface AnalyzeSelectionResponse {
   error?: string;
   errorCode?: ErrorCode;
   errorDetail?: string;
+  requestId?: string;
 }
 
 export interface ShowSelectionAnalysisMessage {
@@ -120,6 +137,7 @@ export type Message =
   | AnalyzeTextRequest 
   | HighlightTextRequest 
   | ClearHighlightsRequest
+  | CancelAnalysisRequest
   | AnalyzeSelectionRequest
   | UpdateContextMenusMessage;
 
@@ -128,5 +146,6 @@ export type MessageResponse =
   | AnalyzeTextResponse 
   | HighlightTextResponse 
   | ClearHighlightsResponse
+  | CancelAnalysisResponse
   | AnalyzeSelectionResponse;
 

@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Settings, Sparkles, FileText, BookOpen, MessageSquare, Lightbulb, History as HistoryIcon, RefreshCw, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Settings, Sparkles, FileText, BookOpen, MessageSquare, Lightbulb, History as HistoryIcon, RefreshCw, AlertCircle, Activity } from 'lucide-react';
 import { SettingsPanel } from './components/Settings';
 import { HistoryPanel } from './components/HistoryPanel';
 import { IdiomCard } from './components/IdiomCard';
@@ -46,6 +46,7 @@ function App() {
     message: '',
     conflictsCount: 0,
   });
+  const [currentRequestId, setCurrentRequestId] = useState<string | null>(null);
   const [currentRecordId, setCurrentRecordId] = useState<string | null>(null);
   const [selectionAnalysis, setSelectionAnalysis] = useState<SelectionAnalysisState>({
     open: false,
@@ -53,6 +54,14 @@ function App() {
     targetCategory: 'vocabulary',
     tabId: null,
   });
+  const [backgroundAnalysis, setBackgroundAnalysis] = useState<{
+    selection: string;
+    targetCategory: 'vocabulary' | 'idioms' | 'syntax';
+    status: 'analyzing' | 'completed' | 'error';
+    result?: AnalyzeSelectionResponse['data'];
+    error?: string;
+  } | null>(null);
+  const cancelledRef = useRef(false);
 
   const loadSyncStatus = async () => {
     const conflicts = await getConflictQueue();
@@ -62,6 +71,10 @@ function App() {
       message: status.message,
       conflictsCount: conflicts.length,
     });
+  };
+
+  const generateRequestId = () => {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
   };
 
   // Check current tab and load history if available
@@ -187,13 +200,22 @@ function App() {
   const analyzeContent = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    cancelledRef.current = false;
+    const requestId = generateRequestId();
+    setCurrentRequestId(requestId);
+    setCurrentRecordId(null);
     setAnalysis(null);
-    
+
     try {
       // First extract content
       const articleData = await extractContent();
+      
+      // Check if user cancelled during extraction
+      if (cancelledRef.current) {
+        return;
+      }
+      
       if (!articleData) {
-        setIsLoading(false);
         return;
       }
       
@@ -201,10 +223,18 @@ function App() {
       const response: AnalyzeTextResponse = await browser.runtime.sendMessage({
         type: 'ANALYZE_TEXT',
         text: articleData.textContent,
+        requestId,
       });
       
+      // Check if user cancelled before response
+      if (cancelledRef.current) {
+        return;
+      }
+      
       if (!response.success || !response.data) {
-        setError(formatErrorMessage(t, response.errorCode, response.errorDetail, response.error));
+        if (response.errorCode !== 'ANALYSIS_CANCELLED') {
+          setError(formatErrorMessage(t, response.errorCode, response.errorDetail, response.error));
+        }
         return;
       }
       
@@ -234,11 +264,35 @@ function App() {
         }
       }
     } catch (err) {
-      setError(formatErrorMessage(t, 'UNKNOWN_ERROR', err instanceof Error ? err.message : String(err)));
+      // Only show error if not cancelled
+      if (!cancelledRef.current) {
+        setError(formatErrorMessage(t, 'UNKNOWN_ERROR', err instanceof Error ? err.message : String(err)));
+      }
     } finally {
       setIsLoading(false);
+      setCurrentRequestId(null);
+      cancelledRef.current = false;
     }
   }, [extractContent, t]);
+
+  // Cancel ongoing analysis
+  const cancelAnalysis = useCallback(async () => {
+    if (currentRequestId) {
+      const requestIdToCancel = currentRequestId;
+      // Immediately give user feedback
+      cancelledRef.current = true;
+      setCurrentRequestId(null);
+      
+      try {
+        await browser.runtime.sendMessage({
+          type: 'CANCEL_ANALYSIS',
+          requestId: requestIdToCancel,
+        });
+      } catch (error) {
+        console.error('Failed to cancel analysis:', error);
+      }
+    }
+  }, [currentRequestId]);
 
   // Highlight text in the page
   const handleHighlight = useCallback(async (text: string, itemId: string) => {
@@ -294,13 +348,53 @@ function App() {
   // Analyze selected text from right-click menu
   const analyzeSelection = useCallback(async (
     text: string,
-    category: 'vocabulary' | 'idioms' | 'syntax'
+    category: 'vocabulary' | 'idioms' | 'syntax',
+    requestId?: string
   ): Promise<AnalyzeSelectionResponse> => {
     return await browser.runtime.sendMessage({
       type: 'ANALYZE_SELECTION',
       text,
       category,
+      requestId: requestId || generateRequestId(),
     });
+  }, []);
+
+  // Handle background analysis completion
+  const handleBackgroundAnalysisComplete = useCallback((result: {
+    selection: string;
+    targetCategory: 'vocabulary' | 'idioms' | 'syntax';
+    success: boolean;
+    data?: AnalyzeSelectionResponse['data'];
+    error?: string;
+  }) => {
+    // Special handling for background analysis start
+    if (result.error === 'BACKGROUND_ANALYSIS') {
+      setBackgroundAnalysis({
+        selection: result.selection,
+        targetCategory: result.targetCategory,
+        status: 'analyzing',
+        result: undefined,
+        error: undefined,
+      });
+      console.log('Background analysis started:', result.selection);
+      return;
+    }
+
+    setBackgroundAnalysis({
+      selection: result.selection,
+      targetCategory: result.targetCategory,
+      status: result.success ? 'completed' : 'error',
+      result: result.data,
+      error: result.error,
+    });
+
+    // Show a notification or message to user
+    if (result.success && result.data) {
+      // We could show a toast here, but for now just log
+      console.log('Background analysis completed:', result.selection);
+    } else if (result.error) {
+      console.error('Background analysis failed:', result.error);
+    }
   }, []);
 
   // Handle adding item from selection analysis
@@ -460,12 +554,24 @@ function App() {
               <AlertCircle size={18} />
               <span className="sync-badge">{syncStatus.conflictsCount}</span>
             </button>
-          )}
-          <button
-            className="icon-btn"
-            onClick={() => setView('history')}
-            title={t('history')}
-          >
+           )}
+           {backgroundAnalysis && backgroundAnalysis.status === 'analyzing' && (
+             <button
+               className="icon-btn"
+               title={t('backgroundAnalysisInProgress')}
+               onClick={() => {
+                 // Optionally show a notification or reopen modal
+                 console.log('Background analysis in progress:', backgroundAnalysis.selection);
+               }}
+             >
+               <Activity size={18} className="pulse" />
+             </button>
+           )}
+           <button
+             className="icon-btn"
+             onClick={() => setView('history')}
+             title={t('history')}
+           >
             <HistoryIcon size={18} />
           </button>
           <button
@@ -500,28 +606,63 @@ function App() {
             </div>
           )}
           
-          <button 
-            className="btn-primary"
-            onClick={analyzeContent}
-            disabled={isLoading || !hasKey}
-          >
-            {isLoading ? (
-              <>
-                <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
+          {isLoading ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button 
+                className="btn-primary"
+                disabled
+                style={{ flex: 1 }}
+              >
+                <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2, marginRight: 8 }} />
                 <span>{t('analyzing')}</span>
-              </>
-            ) : (
-              <>
-                <FileText size={16} />
-                <span>{t('analyzePage')}</span>
-              </>
-            )}
-          </button>
+              </button>
+              <button
+                className="btn-cancel"
+                onClick={cancelAnalysis}
+                style={{
+                  padding: '8px 12px',
+                  fontSize: 13,
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {t('cancel')}
+              </button>
+            </div>
+          ) : (
+            <button 
+              className="btn-primary"
+              onClick={analyzeContent}
+              disabled={!hasKey}
+            >
+              <FileText size={16} />
+              <span>{t('analyzePage')}</span>
+            </button>
+          )}
         </div>
 
         {error && (
           <div className="message error fade-in">
-            {error}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>{error}</span>
+              <button
+                className="btn-secondary"
+                onClick={analyzeContent}
+                disabled={isLoading}
+                style={{
+                  marginLeft: 12,
+                  padding: '4px 12px',
+                  fontSize: 12,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Retry
+              </button>
+            </div>
           </div>
         )}
 
@@ -534,6 +675,12 @@ function App() {
 
         {analysis && (
           <>
+            {article && !currentRecordId && (
+              <div className="message info fade-in" style={{ marginBottom: 12, opacity: 0.8, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <AlertCircle size={14} />
+                <span>{t('staleResultsWarning')}</span>
+              </div>
+            )}
             <div className="tabs">
               <button 
                 className={`tab ${activeTab === 'idioms' ? 'active' : ''}`}
@@ -617,6 +764,7 @@ function App() {
             onAnalyze={analyzeSelection}
             onAdd={handleAddFromSelection}
             onClose={() => setSelectionAnalysis(prev => ({ ...prev, open: false }))}
+            onAnalysisComplete={handleBackgroundAnalysisComplete}
           />
         )}
       </div>

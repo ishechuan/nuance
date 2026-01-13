@@ -136,6 +136,10 @@ const dict = {
     addTo: (category: string) => `Add to ${category}`,
     customAdd: 'Custom Add',
     analysisFailed: 'Analysis failed',
+    backgroundAnalysisInProgress: 'Background analysis in progress...',
+    backgroundAnalysisCompleted: 'Background analysis completed',
+    backgroundAnalysisFailed: 'Background analysis failed',
+    viewResults: 'View Results',
     errorExtractFailed: 'Failed to extract content',
     errorUnknown: 'Unknown error',
     errNoApiKey: 'API key not configured. Please set your DeepSeek API key in settings.',
@@ -148,6 +152,7 @@ const dict = {
     errDeepSeekInvalidJson: 'Failed to parse DeepSeek response.',
     errDeepSeekInvalidFormat: 'Invalid analysis format received from DeepSeek.',
     errDeepSeekFailed: (detail: string) => (detail ? `Analysis failed: ${detail}` : 'Analysis failed'),
+    analysisCancelled: 'Analysis cancelled',
     errUnknown: (detail: string) => (detail ? `Something went wrong: ${detail}` : 'Something went wrong'),
     highlightNotFound: 'Text not found on page. The page may have dynamically loaded content.',
     highlightOpenOriginal: 'Opening original page...',
@@ -168,6 +173,7 @@ const dict = {
     firstTimeSetupStep4: 'Your data stays private - only article text is sent to AI',
     firstTimeSetupStep5: 'Analysis takes about 10-30 seconds',
     firstTimeSetupTip: 'You can always configure your API key later in Settings.',
+    staleResultsWarning: 'Results from previous analysis',
   },
   zh: {
     appTitle: 'Nuance',
@@ -298,6 +304,10 @@ const dict = {
     analyzingSelection: '正在分析...',
     addTo: (category: string) => `添加到 ${category}`,
     customAdd: '自定义添加',
+    backgroundAnalysisInProgress: '后台分析中...',
+    backgroundAnalysisCompleted: '后台分析完成',
+    backgroundAnalysisFailed: '后台分析失败',
+    viewResults: '查看结果',
     analysisFailed: '分析失败',
     errorExtractFailed: '提取内容失败',
     errorUnknown: '未知错误',
@@ -311,6 +321,7 @@ const dict = {
     errDeepSeekInvalidJson: '无法解析 DeepSeek 返回内容。',
     errDeepSeekInvalidFormat: 'DeepSeek 返回的分析格式不正确。',
     errDeepSeekFailed: (detail: string) => (detail ? `分析失败：${detail}` : '分析失败'),
+    analysisCancelled: '分析已取消',
     errUnknown: (detail: string) => (detail ? `发生未知错误：${detail}` : '发生未知错误'),
     highlightNotFound: '页面上未找到该文本。页面可能是动态加载的内容。',
     highlightOpenOriginal: '正在打开原文页面...',
@@ -331,6 +342,7 @@ const dict = {
     firstTimeSetupStep4: '数据保持私密 - 仅文章正文会发送到 AI',
     firstTimeSetupStep5: '分析大约需要 10-30 秒',
     firstTimeSetupTip: '你可以稍后在设置中配置 API Key。',
+    staleResultsWarning: '上一篇文章的分析结果',
   },
 } as const;
 
@@ -424,6 +436,8 @@ export function formatErrorMessage(
       return t('errDeepSeekInvalidFormat');
     case 'DEEPSEEK_ANALYSIS_FAILED':
       return t('errDeepSeekFailed', detail || '');
+    case 'ANALYSIS_CANCELLED':
+      return t('analysisCancelled');
     case 'UNKNOWN_ERROR':
     default:
       return t('errUnknown', detail || fallback || '');

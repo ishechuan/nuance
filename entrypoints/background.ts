@@ -12,7 +12,16 @@ import type {
   AnalyzeSelectionRequest,
   AnalyzeSelectionResponse,
   UpdateContextMenusMessage,
+  CancelAnalysisRequest,
+  CancelAnalysisResponse,
 } from '@/lib/messages';
+
+// Map to store AbortControllers for active analysis requests
+const abortControllers = new Map<string, AbortController>();
+
+function generateRequestId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
 
 function inferErrorCode(error: unknown): { code: ErrorCode; detail?: string } {
   if (error instanceof Error) {
@@ -70,7 +79,7 @@ function createContextMenus(lang: 'en' | 'zh') {
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 
 // Call DeepSeek API for analysis
-async function analyzeWithDeepSeek(text: string): Promise<AnalyzeTextResponse> {
+async function analyzeWithDeepSeek(text: string, signal?: AbortSignal): Promise<AnalyzeTextResponse> {
   const apiKey = await getApiKey();
   const settings = await getSettings();
   
@@ -108,6 +117,7 @@ async function analyzeWithDeepSeek(text: string): Promise<AnalyzeTextResponse> {
         temperature: 0.3,
         response_format: { type: 'json_object' },
       }),
+      signal,
     });
     
     if (!response.ok) {
@@ -157,6 +167,12 @@ async function analyzeWithDeepSeek(text: string): Promise<AnalyzeTextResponse> {
         errorCode: 'DEEPSEEK_INVALID_JSON',
       };
     }
+    if (error && (error as any).name === 'AbortError') {
+      return {
+        success: false,
+        errorCode: 'ANALYSIS_CANCELLED',
+      };
+    }
     return {
       success: false,
       errorCode: 'DEEPSEEK_ANALYSIS_FAILED',
@@ -166,7 +182,7 @@ async function analyzeWithDeepSeek(text: string): Promise<AnalyzeTextResponse> {
 }
 
 // Analyze selected text with context-aware prompting
-async function analyzeSelection(text: string, targetCategory: 'vocabulary' | 'idioms' | 'syntax'): Promise<AnalyzeSelectionResponse> {
+async function analyzeSelection(text: string, targetCategory: 'vocabulary' | 'idioms' | 'syntax', signal?: AbortSignal): Promise<AnalyzeSelectionResponse> {
   const apiKey = await getApiKey();
   
   if (!apiKey) {
@@ -198,6 +214,7 @@ async function analyzeSelection(text: string, targetCategory: 'vocabulary' | 'id
         temperature: 0.3,
         response_format: { type: 'json_object' },
       }),
+      signal,
     });
     
     if (!response.ok) {
@@ -234,6 +251,12 @@ async function analyzeSelection(text: string, targetCategory: 'vocabulary' | 'id
       return {
         success: false,
         errorCode: 'DEEPSEEK_INVALID_JSON',
+      };
+    }
+    if (error && (error as any).name === 'AbortError') {
+      return {
+        success: false,
+        errorCode: 'ANALYSIS_CANCELLED',
       };
     }
     return {
@@ -309,8 +332,19 @@ export default defineBackground(() => {
           }
           
           case 'ANALYZE_TEXT': {
-            const response = await analyzeWithDeepSeek(message.text);
-            sendResponse(response);
+            const requestId = message.requestId || generateRequestId();
+            const controller = new AbortController();
+            abortControllers.set(requestId, controller);
+            
+            try {
+              const response = await analyzeWithDeepSeek(message.text, controller.signal);
+              sendResponse({
+                ...response,
+                requestId,
+              });
+            } finally {
+              abortControllers.delete(requestId);
+            }
             break;
           }
           
@@ -327,11 +361,35 @@ export default defineBackground(() => {
           }
           
           case 'ANALYZE_SELECTION': {
-            const response = await analyzeSelection(message.text, message.category);
-            sendResponse(response);
+            const requestId = message.requestId || generateRequestId();
+            const controller = new AbortController();
+            abortControllers.set(requestId, controller);
+            
+            try {
+              const response = await analyzeSelection(message.text, message.category, controller.signal);
+              sendResponse({
+                ...response,
+                requestId,
+              });
+            } finally {
+              abortControllers.delete(requestId);
+            }
             break;
           }
-          
+
+          case 'CANCEL_ANALYSIS': {
+            const { requestId } = message as CancelAnalysisRequest;
+            const controller = abortControllers.get(requestId);
+            if (controller) {
+              controller.abort();
+              abortControllers.delete(requestId);
+              sendResponse({ success: true } as CancelAnalysisResponse);
+            } else {
+              sendResponse({ success: false, errorCode: 'UNKNOWN_ERROR', errorDetail: 'Request not found' } as CancelAnalysisResponse);
+            }
+            break;
+          }
+
           case 'UPDATE_CONTEXT_MENUS': {
             const lang = message.language;
             browser.contextMenus.removeAll(() => {
