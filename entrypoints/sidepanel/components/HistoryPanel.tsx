@@ -22,6 +22,7 @@ type ViewMode = 'articles' | 'search';
 export function HistoryPanel({ onBack, onConflictsChange }: HistoryPanelProps) {
   const { t, lang } = useI18n();
   const [records, setRecords] = useState<AnalysisRecord[]>([]);
+  const [filterQuery, setFilterQuery] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [selectedRecord, setSelectedRecord] = useState<AnalysisRecord | null>(null);
@@ -59,8 +60,8 @@ export function HistoryPanel({ onBack, onConflictsChange }: HistoryPanelProps) {
   const filteredRecords = useMemo(() => {
     let filtered = [...records];
 
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
+    if (filterQuery.trim()) {
+      const query = filterQuery.toLowerCase();
       filtered = filtered.filter(
         (record) =>
           record.title.toLowerCase().includes(query) ||
@@ -99,7 +100,7 @@ export function HistoryPanel({ onBack, onConflictsChange }: HistoryPanelProps) {
     }
 
     return filtered;
-  }, [records, searchQuery, dateFilter]);
+  }, [records, filterQuery, dateFilter]);
 
   const searchResults = useMemo(() => {
     return searchWord(debouncedSearchQuery, records);
@@ -237,12 +238,9 @@ export function HistoryPanel({ onBack, onConflictsChange }: HistoryPanelProps) {
           <Search size={16} className="search-icon" />
           <input
             type="text"
-            placeholder={t('search')}
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              if (e.target.value) setViewMode('search');
-            }}
+            placeholder={t('filterPlaceholder')}
+            value={filterQuery}
+            onChange={(e) => setFilterQuery(e.target.value)}
             className="form-input"
           />
         </div>

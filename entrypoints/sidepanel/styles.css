@@ -696,6 +696,7 @@ body {
 
 .search-box .form-input {
   padding-left: 36px;
+  padding-right: 16px;
   font-family: var(--font-sans);
 }
 
