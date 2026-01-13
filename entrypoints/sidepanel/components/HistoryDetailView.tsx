@@ -16,6 +16,7 @@ type Tab = 'idioms' | 'syntax' | 'vocabulary';
 export function HistoryDetailView({ record, onBack }: HistoryDetailViewProps) {
   const { t, lang } = useI18n();
   const [activeTab, setActiveTab] = useState<Tab>('idioms');
+  const [highlightMessage, setHighlightMessage] = useState<{ type: 'error' | 'info'; text: string } | null>(null);
 
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -37,6 +38,19 @@ export function HistoryDetailView({ record, onBack }: HistoryDetailViewProps) {
   };
 
   const domain = getDomain(record.url);
+
+  const handleCardClick = async () => {
+    setHighlightMessage({
+      type: 'info',
+      text: t('highlightOpenOriginal'),
+    });
+    try {
+      await browser.tabs.create({ url: record.url });
+    } catch {
+      window.open(record.url, '_blank', 'noopener,noreferrer');
+    }
+    setTimeout(() => setHighlightMessage(null), 3000);
+  };
 
   return (
     <div className="history-detail-view">
@@ -94,6 +108,12 @@ export function HistoryDetailView({ record, onBack }: HistoryDetailViewProps) {
           </a>
         </div>
 
+        {highlightMessage && (
+          <div className={`message ${highlightMessage.type} fade-in`}>
+            {highlightMessage.text}
+          </div>
+        )}
+
         <div className="tabs">
           <button
             className={`tab ${activeTab === 'idioms' ? 'active' : ''}`}
@@ -127,7 +147,7 @@ export function HistoryDetailView({ record, onBack }: HistoryDetailViewProps) {
               key={index}
               item={item}
               isHighlighted={false}
-              onHighlight={() => {}}
+              onHighlight={handleCardClick}
             />
           ))}
 
@@ -136,7 +156,7 @@ export function HistoryDetailView({ record, onBack }: HistoryDetailViewProps) {
               key={index}
               item={item}
               isHighlighted={false}
-              onHighlight={() => {}}
+              onHighlight={handleCardClick}
             />
           ))}
 
@@ -145,7 +165,7 @@ export function HistoryDetailView({ record, onBack }: HistoryDetailViewProps) {
               key={index}
               item={item}
               isHighlighted={false}
-              onHighlight={() => {}}
+              onHighlight={handleCardClick}
             />
           ))}
         </div>

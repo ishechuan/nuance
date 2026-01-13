@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { getSettings, setSettings } from '@/lib/storage';
+import type { ErrorCode } from '@/lib/messages';
+import { CONTEXT_MENU_TITLES } from '@/lib/i18n-shared';
 
 type Lang = 'en' | 'zh';
 
@@ -22,6 +24,7 @@ const dict = {
     loadingAnalyzing: 'Analyzing with DeepSeek AI...',
     loadingMayTake: 'This may take 10-30 seconds',
     charactersExtracted: 'characters extracted',
+    extractedCount: (count: string) => `${count} characters extracted`,
     apiConfig: 'DeepSeek API Configuration',
     apiKeyLabel: 'API Key',
     getApiKeyFrom: 'Get your API key from',
@@ -97,6 +100,10 @@ const dict = {
     syncConflictsDetected: (count: string) => `${count} conflicts detected. Please resolve them in History.`,
     syncConflictsPending: (count: string) => `${count} conflicts need to be resolved`,
     syncFailed: 'Sync failed',
+    syncErrTokenMissing: 'GitHub token not configured.',
+    syncErrGistMissing: 'Gist not configured. Please save token first.',
+    syncErrAutoSyncDisabled: 'Auto-sync is disabled.',
+    syncErrRequestFailed: (detail: string) => (detail ? `Sync failed: ${detail}` : 'Sync failed'),
     resolveConflicts: 'Resolve Conflicts',
     tabArticles: 'Articles',
     tabSearch: 'Search',
@@ -119,15 +126,48 @@ const dict = {
     conflictRecord: (title: string) => `"${title}"`,
     conflictsExist: (count: string) => `${count} records have conflicts`,
     resolveAllConflicts: 'Resolve All Conflicts',
-    contextMenuAnalyze: 'Nuance AI Analysis',
-    contextMenuAddVocab: 'Add to Vocabulary',
-    contextMenuAddIdiom: 'Add to Idioms',
-    contextMenuAddSyntax: 'Add to Syntax',
+    contextMenuAnalyze: CONTEXT_MENU_TITLES.en.main,
+    contextMenuAddVocab: CONTEXT_MENU_TITLES.en.vocab,
+    contextMenuAddIdiom: CONTEXT_MENU_TITLES.en.idiom,
+    contextMenuAddSyntax: CONTEXT_MENU_TITLES.en.syntax,
     analysisResult: 'AI Analysis Result',
     selectedText: 'Selected Text',
     analyzingSelection: 'Analyzing...',
     addTo: (category: string) => `Add to ${category}`,
     customAdd: 'Custom Add',
+    analysisFailed: 'Analysis failed',
+    errorExtractFailed: 'Failed to extract content',
+    errorUnknown: 'Unknown error',
+    errNoApiKey: 'API key not configured. Please set your DeepSeek API key in settings.',
+    errNoActiveTab: 'No active tab found.',
+    errContentScriptUnavailable: 'This page does not allow access (restricted page).',
+    errExtractNoArticle: 'Could not extract article content. This page may not contain readable article content.',
+    errExtractFailed: (detail: string) => (detail ? `Extraction failed: ${detail}` : 'Extraction failed'),
+    errDeepSeekHttp: (detail: string) => (detail ? `DeepSeek request failed: ${detail}` : 'DeepSeek request failed'),
+    errDeepSeekEmpty: 'DeepSeek returned empty response.',
+    errDeepSeekInvalidJson: 'Failed to parse DeepSeek response.',
+    errDeepSeekInvalidFormat: 'Invalid analysis format received from DeepSeek.',
+    errDeepSeekFailed: (detail: string) => (detail ? `Analysis failed: ${detail}` : 'Analysis failed'),
+    errUnknown: (detail: string) => (detail ? `Something went wrong: ${detail}` : 'Something went wrong'),
+    highlightNotFound: 'Text not found on page. The page may have dynamically loaded content.',
+    highlightOpenOriginal: 'Opening original page...',
+    noMatchingRecords: 'No matching records found',
+    timeJustNow: 'Just now',
+    timeMinutesAgo: (count: string) => `${count}m ago`,
+    timeHoursAgo: (count: string) => `${count}h ago`,
+    timeDaysAgo: (count: string) => `${count}d ago`,
+    firstTimeSetupTitle: 'Welcome to Nuance!',
+    firstTimeSetupDesc: 'Get started by configuring your DeepSeek API key.',
+    firstTimeSetupWhy: 'Nuance uses AI to analyze articles and extract language patterns.',
+    firstTimeSetupButton: 'Go to Settings',
+    firstTimeSetupSkip: 'Skip for now',
+    firstTimeSetupStepsTitle: 'Setup steps',
+    firstTimeSetupStep1: 'Open your DeepSeek account',
+    firstTimeSetupStep2: 'Get your API key from platform',
+    firstTimeSetupStep3: 'Paste it in settings - typically costs less than $0.01 per article',
+    firstTimeSetupStep4: 'Your data stays private - only article text is sent to AI',
+    firstTimeSetupStep5: 'Analysis takes about 10-30 seconds',
+    firstTimeSetupTip: 'You can always configure your API key later in Settings.',
   },
   zh: {
     appTitle: 'Nuance',
@@ -147,6 +187,7 @@ const dict = {
     loadingAnalyzing: '正在使用 DeepSeek AI 分析...',
     loadingMayTake: '可能需要 10-30 秒',
     charactersExtracted: '个字符',
+    extractedCount: (count: string) => `已提取 ${count} 个字符`,
     apiConfig: 'DeepSeek API 配置',
     apiKeyLabel: 'API 密钥',
     getApiKeyFrom: '在以下获取 API 密钥',
@@ -222,6 +263,10 @@ const dict = {
     syncConflictsDetected: (count: string) => `检测到 ${count} 个冲突，请在历史记录中解决。`,
     syncConflictsPending: (count: string) => `有待解决的冲突 ${count} 个`,
     syncFailed: '同步失败',
+    syncErrTokenMissing: '尚未配置 GitHub Token。',
+    syncErrGistMissing: '尚未配置 Gist，请先保存 Token。',
+    syncErrAutoSyncDisabled: '已关闭自动同步。',
+    syncErrRequestFailed: (detail: string) => (detail ? `同步失败：${detail}` : '同步失败'),
     resolveConflicts: '解决冲突',
     tabArticles: '文章',
     tabSearch: '搜索',
@@ -244,15 +289,48 @@ const dict = {
     conflictRecord: (title: string) => `「${title}」`,
     conflictsExist: (count: string) => `${count} 条记录存在冲突`,
     resolveAllConflicts: '解决所有冲突',
-    contextMenuAnalyze: 'Nuance AI 分析',
-    contextMenuAddVocab: '添加到词汇',
-    contextMenuAddIdiom: '添加到习语',
-    contextMenuAddSyntax: '添加到语法',
+    contextMenuAnalyze: CONTEXT_MENU_TITLES.zh.main,
+    contextMenuAddVocab: CONTEXT_MENU_TITLES.zh.vocab,
+    contextMenuAddIdiom: CONTEXT_MENU_TITLES.zh.idiom,
+    contextMenuAddSyntax: CONTEXT_MENU_TITLES.zh.syntax,
     analysisResult: 'AI 分析结果',
     selectedText: '选中的文本',
     analyzingSelection: '正在分析...',
     addTo: (category: string) => `添加到 ${category}`,
     customAdd: '自定义添加',
+    analysisFailed: '分析失败',
+    errorExtractFailed: '提取内容失败',
+    errorUnknown: '未知错误',
+    errNoApiKey: '尚未配置 API Key，请先在设置中填写 DeepSeek API 密钥。',
+    errNoActiveTab: '未找到当前活动标签页。',
+    errContentScriptUnavailable: '该页面受限制，扩展无法访问。',
+    errExtractNoArticle: '无法提取文章正文，该页面可能不包含可读的文章内容。',
+    errExtractFailed: (detail: string) => (detail ? `提取失败：${detail}` : '提取失败'),
+    errDeepSeekHttp: (detail: string) => (detail ? `DeepSeek 请求失败：${detail}` : 'DeepSeek 请求失败'),
+    errDeepSeekEmpty: 'DeepSeek 返回了空结果。',
+    errDeepSeekInvalidJson: '无法解析 DeepSeek 返回内容。',
+    errDeepSeekInvalidFormat: 'DeepSeek 返回的分析格式不正确。',
+    errDeepSeekFailed: (detail: string) => (detail ? `分析失败：${detail}` : '分析失败'),
+    errUnknown: (detail: string) => (detail ? `发生未知错误：${detail}` : '发生未知错误'),
+    highlightNotFound: '页面上未找到该文本。页面可能是动态加载的内容。',
+    highlightOpenOriginal: '正在打开原文页面...',
+    noMatchingRecords: '没有找到匹配的记录',
+    timeJustNow: '刚刚',
+    timeMinutesAgo: (count: string) => `${count}分钟前`,
+    timeHoursAgo: (count: string) => `${count}小时前`,
+    timeDaysAgo: (count: string) => `${count}天前`,
+    firstTimeSetupTitle: '欢迎使用 Nuance！',
+    firstTimeSetupDesc: '配置 DeepSeek API 密钥即可开始使用。',
+    firstTimeSetupWhy: 'Nuance 使用 AI 分析文章并提取语言模式。',
+    firstTimeSetupButton: '去设置',
+    firstTimeSetupSkip: '稍后再说',
+    firstTimeSetupStepsTitle: '配置步骤',
+    firstTimeSetupStep1: '打开你的 DeepSeek 账户',
+    firstTimeSetupStep2: '在平台获取 API 密钥',
+    firstTimeSetupStep3: '在设置中粘贴密钥 - 每篇文章通常不到 $0.01',
+    firstTimeSetupStep4: '数据保持私密 - 仅文章正文会发送到 AI',
+    firstTimeSetupStep5: '分析大约需要 10-30 秒',
+    firstTimeSetupTip: '你可以稍后在设置中配置 API Key。',
   },
 } as const;
 
@@ -316,4 +394,59 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
 export function useI18n() {
   return useContext(I18nContext);
+}
+
+export function formatErrorMessage(
+  t: (key: DictKey, arg1?: string, arg2?: string) => string,
+  code?: ErrorCode,
+  detail?: string,
+  fallback?: string
+): string {
+  if (!code) return fallback || (detail ? t('errUnknown', detail) : t('errUnknown'));
+  switch (code) {
+    case 'NO_API_KEY':
+      return t('errNoApiKey');
+    case 'NO_ACTIVE_TAB':
+      return t('errNoActiveTab');
+    case 'CONTENT_SCRIPT_UNAVAILABLE':
+      return t('errContentScriptUnavailable');
+    case 'EXTRACT_NO_ARTICLE':
+      return t('errExtractNoArticle');
+    case 'EXTRACT_FAILED':
+      return t('errExtractFailed', detail || '');
+    case 'DEEPSEEK_HTTP_ERROR':
+      return t('errDeepSeekHttp', detail || '');
+    case 'DEEPSEEK_EMPTY_RESPONSE':
+      return t('errDeepSeekEmpty');
+    case 'DEEPSEEK_INVALID_JSON':
+      return t('errDeepSeekInvalidJson');
+    case 'DEEPSEEK_INVALID_FORMAT':
+      return t('errDeepSeekInvalidFormat');
+    case 'DEEPSEEK_ANALYSIS_FAILED':
+      return t('errDeepSeekFailed', detail || '');
+    case 'UNKNOWN_ERROR':
+    default:
+      return t('errUnknown', detail || fallback || '');
+  }
+}
+
+export function formatSyncErrorMessage(
+  t: (key: DictKey, arg1?: string, arg2?: string) => string,
+  code?: 'SYNC_TOKEN_MISSING' | 'SYNC_GIST_MISSING' | 'SYNC_AUTO_SYNC_DISABLED' | 'SYNC_REQUEST_FAILED' | 'SYNC_UNKNOWN',
+  detail?: string,
+  fallback?: string
+): string {
+  switch (code) {
+    case 'SYNC_TOKEN_MISSING':
+      return t('syncErrTokenMissing');
+    case 'SYNC_GIST_MISSING':
+      return t('syncErrGistMissing');
+    case 'SYNC_AUTO_SYNC_DISABLED':
+      return t('syncErrAutoSyncDisabled');
+    case 'SYNC_REQUEST_FAILED':
+    case 'SYNC_UNKNOWN':
+      return t('syncErrRequestFailed', detail || fallback || '');
+    default:
+      return fallback || t('syncFailed');
+  }
 }

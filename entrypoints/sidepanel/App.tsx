@@ -6,10 +6,10 @@ import { IdiomCard } from './components/IdiomCard';
 import { SyntaxCard } from './components/SyntaxCard';
 import { VocabularyCard } from './components/VocabularyCard';
 import { SelectionAnalysisModal } from './components/SelectionAnalysisModal';
-import { hasApiKey, addAnalysisRecord, updateAnalysisRecord, getAnalysisHistory, findAnalysisByUrl } from '@/lib/storage';
+import { hasApiKey, addAnalysisRecord, updateAnalysisRecord, getAnalysisHistory, findAnalysisByUrl, isFirstTimeUser, completeFirstTimeSetup } from '@/lib/storage';
 import type { AnalysisResult, IdiomItem, SyntaxItem, VocabularyItem } from '@/lib/types';
-import type { ExtractContentResponse, AnalyzeTextResponse, AnalyzeSelectionResponse } from '@/lib/messages';
-import { useI18n } from './i18n';
+import type { ExtractContentResponse, AnalyzeTextResponse, AnalyzeSelectionResponse, HighlightTextResponse, ClearHighlightsResponse } from '@/lib/messages';
+import { formatErrorMessage, useI18n } from './i18n';
 import { syncAfterAnalysis, getSyncStatusInfo } from '@/lib/github-sync';
 import { getConflictQueue } from '@/lib/storage';
 
@@ -39,6 +39,8 @@ function App() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [highlightedItem, setHighlightedItem] = useState<string | null>(null);
   const [hasKey, setHasKey] = useState<boolean | null>(null);
+  const [isFirstTime, setIsFirstTime] = useState<boolean | null>(null);
+  const [highlightMessage, setHighlightMessage] = useState<{ type: 'error' | 'info'; text: string } | null>(null);
   const [syncStatus, setSyncStatus] = useState<{ status: string; message: string; conflictsCount: number }>({
     status: 'idle',
     message: '',
@@ -112,21 +114,22 @@ function App() {
   // Check API key on mount and setup tab listeners
   useEffect(() => {
     hasApiKey().then(setHasKey);
+    isFirstTimeUser().then(setIsFirstTime);
     loadSyncStatus();
-    
+
     // Auto-load history for current tab
     checkCurrentTab();
-    
+
     // Update context menus with current language
     browser.runtime.sendMessage({
       type: 'UPDATE_CONTEXT_MENUS',
       language: lang,
     });
-    
+
     // Add tab event listeners
     browser.tabs.onActivated.addListener(handleTabActivated);
     browser.tabs.onUpdated.addListener(handleTabUpdated);
-    
+
     // Remove tab event listeners on cleanup
     return () => {
       browser.tabs.onActivated.removeListener(handleTabActivated);
@@ -163,7 +166,8 @@ function App() {
       });
       
       if (!response.success || !response.data) {
-        throw new Error(response.error || 'Failed to extract content');
+        setError(formatErrorMessage(t, response.errorCode, response.errorDetail, response.error));
+        return null;
       }
       
       setArticle({
@@ -174,11 +178,10 @@ function App() {
       
       return response.data;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      setError(message);
+      setError(formatErrorMessage(t, 'UNKNOWN_ERROR', err instanceof Error ? err.message : String(err)));
       return null;
     }
-  }, []);
+  }, [t]);
 
   // Analyze extracted content
   const analyzeContent = useCallback(async () => {
@@ -201,7 +204,8 @@ function App() {
       });
       
       if (!response.success || !response.data) {
-        throw new Error(response.error || 'Analysis failed');
+        setError(formatErrorMessage(t, response.errorCode, response.errorDetail, response.error));
+        return;
       }
       
       setAnalysis(response.data);
@@ -230,37 +234,61 @@ function App() {
         }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      setError(message);
+      setError(formatErrorMessage(t, 'UNKNOWN_ERROR', err instanceof Error ? err.message : String(err)));
     } finally {
       setIsLoading(false);
     }
-  }, [extractContent]);
+  }, [extractContent, t]);
 
   // Highlight text in the page
   const handleHighlight = useCallback(async (text: string, itemId: string) => {
-    // Clear previous highlight
-    await browser.runtime.sendMessage({ type: 'CLEAR_HIGHLIGHTS' });
+    const clearResponse: ClearHighlightsResponse = await browser.runtime.sendMessage({ type: 'CLEAR_HIGHLIGHTS' });
+    setHighlightMessage(null);
+    if (clearResponse && clearResponse.success === false) {
+      setHighlightMessage({
+        type: 'error',
+        text: formatErrorMessage(t, clearResponse.errorCode, clearResponse.errorDetail),
+      });
+      setTimeout(() => setHighlightMessage(null), 5000);
+      return;
+    }
     
     if (highlightedItem === itemId) {
       setHighlightedItem(null);
       return;
     }
     
-    const response = await browser.runtime.sendMessage({
+    const response: HighlightTextResponse = await browser.runtime.sendMessage({
       type: 'HIGHLIGHT_TEXT',
       text,
     });
     
+    if (response && response.success === false) {
+      setHighlightMessage({
+        type: 'error',
+        text: formatErrorMessage(t, response.errorCode, response.errorDetail),
+      });
+      setTimeout(() => setHighlightMessage(null), 5000);
+      return;
+    }
+
     if (response.found) {
       setHighlightedItem(itemId);
+    } else {
+      setHighlightMessage({
+        type: 'info',
+        text: t('highlightNotFound'),
+      });
+      setTimeout(() => setHighlightMessage(null), 5000);
     }
-  }, [highlightedItem]);
+  }, [highlightedItem, t]);
 
   // Handle settings saved
   const handleSettingsSaved = useCallback(() => {
     setHasKey(true);
     setView('main');
+    completeFirstTimeSetup();
+    setIsFirstTime(false);
   }, []);
 
   // Analyze selected text from right-click menu
@@ -323,11 +351,92 @@ function App() {
   }
 
   // Render loading state check for API key
-  if (hasKey === null) {
+  if (hasKey === null || isFirstTime === null) {
     return (
       <div className="app">
         <div className="loading">
           <div className="spinner" />
+        </div>
+      </div>
+    );
+  }
+
+  // Render onboarding for first-time users
+  if (!hasKey && isFirstTime === true) {
+    return (
+      <div className="app">
+        <header className="header">
+          <div className="header-title">
+            <Sparkles size={20} />
+            <h1>{t('firstTimeSetupTitle')}</h1>
+          </div>
+        </header>
+
+        <div className="content" style={{ padding: '24px' }}>
+          <div className="onboarding-card fade-in">
+            <h2 style={{ marginBottom: 16, fontSize: 18 }}>{t('firstTimeSetupDesc')}</h2>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.6 }}>
+              {t('firstTimeSetupWhy')}
+            </p>
+
+            <div style={{ marginBottom: 24 }}>
+              <h3 style={{ fontSize: 14, marginBottom: 12, fontWeight: 600 }}>{t('firstTimeSetupStepsTitle')}</h3>
+              <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {[1, 2, 3, 4, 5].map((index) => (
+                  <li key={index} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, fontSize: 13 }}>
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 24,
+                      height: 24,
+                      borderRadius: '50%',
+                      background: 'var(--accent-primary)',
+                      color: 'white',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      flexShrink: 0,
+                    }}>
+                      {index}
+                    </span>
+                    <span style={{ lineHeight: 1.6, paddingTop: 2 }}>
+                      {t(`firstTimeSetupStep${index}` as any)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, flexDirection: 'column' }}>
+              <button
+                className="btn-primary"
+                onClick={() => setView('settings')}
+                style={{ padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                <Settings size={16} />
+                {t('firstTimeSetupButton')}
+              </button>
+
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setIsFirstTime(false);
+                }}
+              >
+                {t('firstTimeSetupSkip')}
+              </button>
+            </div>
+
+            <p style={{
+              marginTop: 24,
+              fontSize: 12,
+              color: 'var(--text-muted)',
+              textAlign: 'center',
+              fontStyle: 'italic',
+            }}>
+              {t('firstTimeSetupTip')}
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -381,9 +490,7 @@ function App() {
             <div className="article-info">
               <span className="article-title">{article.title}</span>
               <span className="article-meta">
-                {lang === 'zh'
-                  ? `已提取 ${article.textContent.length.toLocaleString()} ${t('charactersExtracted')}`
-                  : `${article.textContent.length.toLocaleString()} ${t('charactersExtracted')}`}
+                {t('extractedCount', article.textContent.length.toLocaleString())}
               </span>
             </div>
           ) : (
@@ -415,6 +522,13 @@ function App() {
         {error && (
           <div className="message error fade-in">
             {error}
+          </div>
+        )}
+
+        {highlightMessage && (
+          <div className={`message ${highlightMessage.type} fade-in`}>
+            {highlightMessage.type === 'error' && <AlertCircle size={16} />}
+            {highlightMessage.text}
           </div>
         )}
 
@@ -511,4 +625,3 @@ function App() {
 }
 
 export default App;
-

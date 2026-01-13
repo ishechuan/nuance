@@ -9,6 +9,19 @@ export type MessageType =
   | 'ANALYZE_SELECTION'
   | 'SHOW_SELECTION_ANALYSIS';
 
+export type ErrorCode =
+  | 'NO_API_KEY'
+  | 'NO_ACTIVE_TAB'
+  | 'CONTENT_SCRIPT_UNAVAILABLE'
+  | 'EXTRACT_NO_ARTICLE'
+  | 'EXTRACT_FAILED'
+  | 'DEEPSEEK_HTTP_ERROR'
+  | 'DEEPSEEK_EMPTY_RESPONSE'
+  | 'DEEPSEEK_INVALID_JSON'
+  | 'DEEPSEEK_INVALID_FORMAT'
+  | 'DEEPSEEK_ANALYSIS_FAILED'
+  | 'UNKNOWN_ERROR';
+
 export interface ExtractContentRequest {
   type: 'EXTRACT_CONTENT';
 }
@@ -22,6 +35,8 @@ export interface ExtractContentResponse {
     url: string;
   };
   error?: string;
+  errorCode?: ErrorCode;
+  errorDetail?: string;
 }
 
 export interface AnalyzeTextRequest {
@@ -33,6 +48,8 @@ export interface AnalyzeTextResponse {
   success: boolean;
   data?: AnalysisResult;
   error?: string;
+  errorCode?: ErrorCode;
+  errorDetail?: string;
 }
 
 export interface HighlightTextRequest {
@@ -43,6 +60,8 @@ export interface HighlightTextRequest {
 export interface HighlightTextResponse {
   success: boolean;
   found: boolean;
+  errorCode?: ErrorCode;
+  errorDetail?: string;
 }
 
 export interface ClearHighlightsRequest {
@@ -51,6 +70,8 @@ export interface ClearHighlightsRequest {
 
 export interface ClearHighlightsResponse {
   success: boolean;
+  errorCode?: ErrorCode;
+  errorDetail?: string;
 }
 
 export interface AnalyzeSelectionRequest {
@@ -78,6 +99,8 @@ export interface AnalyzeSelectionResponse {
     };
   };
   error?: string;
+  errorCode?: ErrorCode;
+  errorDetail?: string;
 }
 
 export interface ShowSelectionAnalysisMessage {

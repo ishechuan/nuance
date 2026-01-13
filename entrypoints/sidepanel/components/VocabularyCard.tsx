@@ -1,4 +1,5 @@
 import type { VocabularyItem } from '@/lib/types';
+import { useI18n } from '../i18n';
 
 interface VocabularyCardProps {
   item: VocabularyItem;
@@ -7,6 +8,7 @@ interface VocabularyCardProps {
 }
 
 export function VocabularyCard({ item, isHighlighted, onHighlight }: VocabularyCardProps) {
+  const { t } = useI18n();
   return (
     <div 
       className={`analysis-card ${isHighlighted ? 'highlighted' : ''}`}
@@ -24,7 +26,7 @@ export function VocabularyCard({ item, isHighlighted, onHighlight }: VocabularyC
               color: 'white',
               fontWeight: 600,
             }}>
-              自定义
+              {t('customAdd')}
             </span>
           )}
           <span className={`card-level ${item.level.toLowerCase()}`}>{item.level}</span>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Key, CheckCircle, AlertCircle, RefreshCw, Github, Link, Copy, Check, Upload, Download } from 'lucide-react';
 import { getApiKey, setApiKey, getSettings, setSettings, getSyncSettings, setSyncSettings } from '@/lib/storage';
-import { useI18n } from '../i18n';
+import { formatSyncErrorMessage, useI18n } from '../i18n';
 import {
   validateToken,
   syncToGist,
@@ -204,10 +204,13 @@ export function SettingsPanel({ onBack, onSaved, onSyncStatusChange }: SettingsP
         await loadSyncStatus();
         onSyncStatusChange?.();
       } else {
-        setSyncMessage({ type: 'error', text: result.error || t('syncFailed') });
+        setSyncMessage({ type: 'error', text: formatSyncErrorMessage(t, result.errorCode, result.errorDetail, result.error) });
       }
     } catch (error) {
-      setSyncMessage({ type: 'error', text: t('syncFailed') });
+      setSyncMessage({
+        type: 'error',
+        text: formatSyncErrorMessage(t, 'SYNC_UNKNOWN', error instanceof Error ? error.message : String(error)),
+      });
     } finally {
       setIsSyncing(false);
     }

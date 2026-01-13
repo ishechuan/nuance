@@ -49,7 +49,7 @@ function extractArticle(): ExtractContentResponse {
     if (!article) {
       return {
         success: false,
-        error: 'Could not extract article content. This page may not contain readable article content.',
+        errorCode: 'EXTRACT_NO_ARTICLE',
       };
     }
     
@@ -65,16 +65,18 @@ function extractArticle(): ExtractContentResponse {
   } catch (error) {
     return {
       success: false,
-      error: `Extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      errorCode: 'EXTRACT_FAILED',
+      errorDetail: error instanceof Error ? error.message : String(error),
     };
   }
 }
 
 // Find and highlight text in the document
 function highlightText(searchText: string): HighlightTextResponse {
-  // First clear any existing highlights
-  clearHighlights();
-  injectStyles();
+  try {
+    // First clear any existing highlights
+    clearHighlights();
+    injectStyles();
   
   const searchLower = searchText.toLowerCase().trim();
   if (!searchLower) {
@@ -179,24 +181,38 @@ function highlightText(searchText: string): HighlightTextResponse {
     }
   }
   
-  return { success: true, found };
+    return { success: true, found };
+  } catch (error) {
+    return {
+      success: false,
+      found: false,
+      errorCode: 'UNKNOWN_ERROR',
+      errorDetail: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 // Clear all highlights
 function clearHighlights(): ClearHighlightsResponse {
-  const highlights = document.querySelectorAll(`.${HIGHLIGHT_CLASS}`);
-  highlights.forEach((highlight) => {
-    const parent = highlight.parentNode;
-    if (parent) {
-      // Replace the highlight element with its text content
-      const textNode = document.createTextNode(highlight.textContent || '');
-      parent.replaceChild(textNode, highlight);
-      // Normalize to merge adjacent text nodes
-      parent.normalize();
-    }
-  });
-  
-  return { success: true };
+  try {
+    const highlights = document.querySelectorAll(`.${HIGHLIGHT_CLASS}`);
+    highlights.forEach((highlight) => {
+      const parent = highlight.parentNode;
+      if (parent) {
+        const textNode = document.createTextNode(highlight.textContent || '');
+        parent.replaceChild(textNode, highlight);
+        parent.normalize();
+      }
+    });
+
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      errorCode: 'UNKNOWN_ERROR',
+      errorDetail: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 export default defineContentScript({

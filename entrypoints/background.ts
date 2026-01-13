@@ -1,7 +1,9 @@
 import { getApiKey, getSettings } from '@/lib/storage';
 import type { AnalysisResult } from '@/lib/types';
 import { ANALYSIS_SYSTEM_PROMPT, buildAnalysisPrompt, buildSelectionAnalysisPrompt } from '@/lib/prompts';
+import { CONTEXT_MENU_TITLES } from '@/lib/i18n-shared';
 import type {
+  ErrorCode,
   Message,
   AnalyzeTextResponse,
   ExtractContentResponse,
@@ -12,23 +14,30 @@ import type {
   UpdateContextMenusMessage,
 } from '@/lib/messages';
 
-const MENU_TITLES = {
-  en: {
-    main: 'Nuance AI Analysis',
-    vocab: 'Add to Vocabulary',
-    idiom: 'Add to Idioms',
-    syntax: 'Add to Syntax',
-  },
-  zh: {
-    main: 'Nuance AI 分析',
-    vocab: '添加到词汇',
-    idiom: '添加到习语',
-    syntax: '添加到语法',
-  },
-};
+function inferErrorCode(error: unknown): { code: ErrorCode; detail?: string } {
+  if (error instanceof Error) {
+    const message = error.message || '';
+
+    if (message.includes('No active tab')) {
+      return { code: 'NO_ACTIVE_TAB', detail: message };
+    }
+
+    if (
+      message.includes('Could not establish connection') ||
+      message.includes('Receiving end does not exist') ||
+      message.includes('The message port closed')
+    ) {
+      return { code: 'CONTENT_SCRIPT_UNAVAILABLE', detail: message };
+    }
+
+    return { code: 'UNKNOWN_ERROR', detail: message };
+  }
+
+  return { code: 'UNKNOWN_ERROR', detail: String(error) };
+}
 
 function createContextMenus(lang: 'en' | 'zh') {
-  const titles = MENU_TITLES[lang];
+  const titles = CONTEXT_MENU_TITLES[lang];
   
   browser.contextMenus.create({
     id: 'nuance-analyze-selection',
@@ -68,7 +77,7 @@ async function analyzeWithDeepSeek(text: string): Promise<AnalyzeTextResponse> {
   if (!apiKey) {
     return {
       success: false,
-      error: 'API Key not configured. Please set your DeepSeek API key in settings.',
+      errorCode: 'NO_API_KEY',
     };
   }
   
@@ -106,7 +115,8 @@ async function analyzeWithDeepSeek(text: string): Promise<AnalyzeTextResponse> {
       const errorMessage = errorData.error?.message || `API request failed with status ${response.status}`;
       return {
         success: false,
-        error: errorMessage,
+        errorCode: 'DEEPSEEK_HTTP_ERROR',
+        errorDetail: errorMessage,
       };
     }
     
@@ -116,7 +126,7 @@ async function analyzeWithDeepSeek(text: string): Promise<AnalyzeTextResponse> {
     if (!content) {
       return {
         success: false,
-        error: 'No response content from DeepSeek API',
+        errorCode: 'DEEPSEEK_EMPTY_RESPONSE',
       };
     }
     
@@ -127,7 +137,7 @@ async function analyzeWithDeepSeek(text: string): Promise<AnalyzeTextResponse> {
     if (!analysis.idioms || !analysis.syntax || !analysis.vocabulary) {
       return {
         success: false,
-        error: 'Invalid analysis format received from API',
+        errorCode: 'DEEPSEEK_INVALID_FORMAT',
       };
     }
     const allowed = new Set(settings.vocabLevels);
@@ -144,12 +154,13 @@ async function analyzeWithDeepSeek(text: string): Promise<AnalyzeTextResponse> {
     if (error instanceof SyntaxError) {
       return {
         success: false,
-        error: 'Failed to parse API response as JSON',
+        errorCode: 'DEEPSEEK_INVALID_JSON',
       };
     }
     return {
       success: false,
-      error: `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      errorCode: 'DEEPSEEK_ANALYSIS_FAILED',
+      errorDetail: error instanceof Error ? error.message : String(error),
     };
   }
 }
@@ -161,7 +172,7 @@ async function analyzeSelection(text: string, targetCategory: 'vocabulary' | 'id
   if (!apiKey) {
     return {
       success: false,
-      error: 'API Key not configured. Please set your DeepSeek API key in settings.',
+      errorCode: 'NO_API_KEY',
     };
   }
   
@@ -194,7 +205,8 @@ async function analyzeSelection(text: string, targetCategory: 'vocabulary' | 'id
       const errorMessage = errorData.error?.message || `API request failed with status ${response.status}`;
       return {
         success: false,
-        error: errorMessage,
+        errorCode: 'DEEPSEEK_HTTP_ERROR',
+        errorDetail: errorMessage,
       };
     }
     
@@ -204,7 +216,7 @@ async function analyzeSelection(text: string, targetCategory: 'vocabulary' | 'id
     if (!content) {
       return {
         success: false,
-        error: 'No response content from DeepSeek API',
+        errorCode: 'DEEPSEEK_EMPTY_RESPONSE',
       };
     }
     
@@ -221,12 +233,13 @@ async function analyzeSelection(text: string, targetCategory: 'vocabulary' | 'id
     if (error instanceof SyntaxError) {
       return {
         success: false,
-        error: 'Failed to parse API response as JSON',
+        errorCode: 'DEEPSEEK_INVALID_JSON',
       };
     }
     return {
       success: false,
-      error: `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      errorCode: 'DEEPSEEK_ANALYSIS_FAILED',
+      errorDetail: error instanceof Error ? error.message : String(error),
     };
   }
 }
@@ -329,13 +342,29 @@ export default defineBackground(() => {
           }
           
           default:
-            sendResponse({ success: false, error: 'Unknown message type' });
+            sendResponse({ success: false, errorCode: 'UNKNOWN_ERROR', errorDetail: 'Unknown message type' });
         }
       } catch (error) {
-        sendResponse({
-          success: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
+        const inferred = inferErrorCode(error);
+        switch (message.type) {
+          case 'EXTRACT_CONTENT':
+            sendResponse({ success: false, errorCode: inferred.code, errorDetail: inferred.detail } satisfies ExtractContentResponse);
+            break;
+          case 'ANALYZE_TEXT':
+            sendResponse({ success: false, errorCode: inferred.code, errorDetail: inferred.detail } satisfies AnalyzeTextResponse);
+            break;
+          case 'HIGHLIGHT_TEXT':
+            sendResponse({ success: false, found: false, errorCode: inferred.code, errorDetail: inferred.detail } satisfies HighlightTextResponse);
+            break;
+          case 'CLEAR_HIGHLIGHTS':
+            sendResponse({ success: false, errorCode: inferred.code, errorDetail: inferred.detail } satisfies ClearHighlightsResponse);
+            break;
+          case 'ANALYZE_SELECTION':
+            sendResponse({ success: false, errorCode: inferred.code, errorDetail: inferred.detail } satisfies AnalyzeSelectionResponse);
+            break;
+          default:
+            sendResponse({ success: false, errorCode: inferred.code, errorDetail: inferred.detail });
+        }
       }
     })();
     

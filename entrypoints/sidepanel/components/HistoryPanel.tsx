@@ -254,7 +254,7 @@ export function HistoryPanel({ onBack, onConflictsChange }: HistoryPanelProps) {
       {filteredRecords.length === 0 ? (
         <div className="empty-state">
           <FileText className="empty-state-icon" size={48} />
-          <h3>{lang === 'zh' ? '没有找到匹配的记录' : 'No matching records found'}</h3>
+          <h3>{t('noMatchingRecords')}</h3>
         </div>
       ) : (
         <div className="history-list">

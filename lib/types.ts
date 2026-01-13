@@ -24,6 +24,8 @@ export interface SyncStatus {
 export interface SyncResult {
   success: boolean;
   error?: string;
+  errorCode?: 'SYNC_TOKEN_MISSING' | 'SYNC_GIST_MISSING' | 'SYNC_AUTO_SYNC_DISABLED' | 'SYNC_REQUEST_FAILED' | 'SYNC_UNKNOWN';
+  errorDetail?: string;
   pushed?: number;
   pulled?: number;
   conflicts?: ConflictRecord[];

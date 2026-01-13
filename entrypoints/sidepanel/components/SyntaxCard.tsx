@@ -1,4 +1,5 @@
 import type { SyntaxItem } from '@/lib/types';
+import { useI18n } from '../i18n';
 
 interface SyntaxCardProps {
   item: SyntaxItem;
@@ -7,6 +8,7 @@ interface SyntaxCardProps {
 }
 
 export function SyntaxCard({ item, isHighlighted, onHighlight }: SyntaxCardProps) {
+  const { t } = useI18n();
   return (
     <div 
       className={`analysis-card ${isHighlighted ? 'highlighted' : ''}`}
@@ -23,7 +25,7 @@ export function SyntaxCard({ item, isHighlighted, onHighlight }: SyntaxCardProps
             color: 'white',
             fontWeight: 600,
           }}>
-            自定义
+            {t('customAdd')}
           </span>
         )}
       </div>

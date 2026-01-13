@@ -1,4 +1,5 @@
 import type { IdiomItem } from '@/lib/types';
+import { useI18n } from '../i18n';
 
 interface IdiomCardProps {
   item: IdiomItem;
@@ -7,6 +8,7 @@ interface IdiomCardProps {
 }
 
 export function IdiomCard({ item, isHighlighted, onHighlight }: IdiomCardProps) {
+  const { t } = useI18n();
   return (
     <div 
       className={`analysis-card ${isHighlighted ? 'highlighted' : ''}`}
@@ -23,7 +25,7 @@ export function IdiomCard({ item, isHighlighted, onHighlight }: IdiomCardProps) 
             color: 'white',
             fontWeight: 600,
           }}>
-            自定义
+            {t('customAdd')}
           </span>
         )}
       </div>

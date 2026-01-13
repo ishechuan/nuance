@@ -206,7 +206,7 @@ export async function syncWithLookupOrCreate(): Promise<SyncResult> {
   try {
     const settings = await getSyncSettings();
     if (!settings.githubToken) {
-      return { success: false, error: 'GitHub token not configured' };
+      return { success: false, errorCode: 'SYNC_TOKEN_MISSING' };
     }
 
     const localHistory = await getAnalysisHistory();
@@ -246,7 +246,7 @@ export async function syncWithLookupOrCreate(): Promise<SyncResult> {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return { success: false, error: message };
+    return { success: false, errorCode: 'SYNC_REQUEST_FAILED', errorDetail: message };
   }
 }
 
@@ -254,7 +254,7 @@ export async function syncToGist(): Promise<SyncResult> {
   try {
     const settings = await getSyncSettings();
     if (!settings.githubToken) {
-      return { success: false, error: 'GitHub token not configured' };
+      return { success: false, errorCode: 'SYNC_TOKEN_MISSING' };
     }
 
     const localHistory = await getAnalysisHistory();
@@ -272,7 +272,7 @@ export async function syncToGist(): Promise<SyncResult> {
     return { success: true, pushed: localHistory.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return { success: false, error: message };
+    return { success: false, errorCode: 'SYNC_REQUEST_FAILED', errorDetail: message };
   }
 }
 
@@ -280,7 +280,7 @@ export async function syncFromGist(): Promise<SyncResult> {
   try {
     const settings = await getSyncSettings();
     if (!settings.githubToken || !settings.gistId) {
-      return { success: false, error: 'Gist not configured' };
+      return { success: false, errorCode: settings.githubToken ? 'SYNC_GIST_MISSING' : 'SYNC_TOKEN_MISSING' };
     }
 
     const remoteHistory = await getGistHistory(settings.githubToken, settings.gistId);
@@ -302,7 +302,7 @@ export async function syncFromGist(): Promise<SyncResult> {
     return { success: true, pulled: newFromRemote.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return { success: false, error: message };
+    return { success: false, errorCode: 'SYNC_REQUEST_FAILED', errorDetail: message };
   }
 }
 
@@ -310,7 +310,7 @@ export async function syncBidirectional(): Promise<SyncResult> {
   try {
     const settings = await getSyncSettings();
     if (!settings.githubToken || !settings.gistId) {
-      return { success: false, error: 'Gist not configured' };
+      return { success: false, errorCode: settings.githubToken ? 'SYNC_GIST_MISSING' : 'SYNC_TOKEN_MISSING' };
     }
 
     const localHistory = await getAnalysisHistory();
@@ -345,7 +345,7 @@ export async function syncBidirectional(): Promise<SyncResult> {
     return { success: true, pushed: merged.length, pulled: newFromRemote.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return { success: false, error: message };
+    return { success: false, errorCode: 'SYNC_REQUEST_FAILED', errorDetail: message };
   }
 }
 
@@ -402,7 +402,7 @@ export async function resolveAllConflicts(prefer: 'local' | 'remote'): Promise<v
 export async function syncAfterAnalysis(): Promise<SyncResult> {
   const settings = await getSyncSettings();
   if (!settings.syncOnAnalyze || !settings.githubToken) {
-    return { success: false, error: 'Auto-sync disabled' };
+    return { success: false, errorCode: settings.githubToken ? 'SYNC_AUTO_SYNC_DISABLED' : 'SYNC_TOKEN_MISSING' };
   }
 
   return syncToGist();

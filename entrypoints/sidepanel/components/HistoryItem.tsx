@@ -21,13 +21,13 @@ export function HistoryItem({ record, onView, onDelete }: HistoryItemProps) {
     const days = Math.floor(hours / 24);
 
     if (seconds < 60) {
-      return lang === 'zh' ? '刚刚' : 'Just now';
+      return t('timeJustNow');
     } else if (minutes < 60) {
-      return lang === 'zh' ? `${minutes}分钟前` : `${minutes}m ago`;
+      return t('timeMinutesAgo', minutes.toString());
     } else if (hours < 24) {
-      return lang === 'zh' ? `${hours}小时前` : `${hours}h ago`;
+      return t('timeHoursAgo', hours.toString());
     } else if (days < 7) {
-      return lang === 'zh' ? `${days}天前` : `${days}d ago`;
+      return t('timeDaysAgo', days.toString());
     } else {
       const date = new Date(timestamp);
       return date.toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', {

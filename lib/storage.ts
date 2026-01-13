@@ -24,6 +24,7 @@ const STORAGE_KEYS = {
   API_KEY: 'nuance_api_key',
   ANALYSIS_HISTORY: 'nuance_analysis_history',
   SETTINGS: 'nuance_settings',
+  FIRST_TIME_SETUP: 'nuance_first_time_setup_complete',
 } as const;
 
 // API Key functions
@@ -119,6 +120,15 @@ export async function setSettings(partial: Partial<UserSettings>): Promise<void>
     language: partial.language === 'zh' ? 'zh' : current.language,
   };
   await browser.storage.local.set({ [STORAGE_KEYS.SETTINGS]: next });
+}
+
+export async function isFirstTimeUser(): Promise<boolean> {
+  const result = await browser.storage.local.get(STORAGE_KEYS.FIRST_TIME_SETUP);
+  return !result[STORAGE_KEYS.FIRST_TIME_SETUP];
+}
+
+export async function completeFirstTimeSetup(): Promise<void> {
+  await browser.storage.local.set({ [STORAGE_KEYS.FIRST_TIME_SETUP]: true });
 }
 
 const STORAGE_KEYS_SYNC = {

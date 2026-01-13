@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Sparkles, Loader2 } from 'lucide-react';
 import type { VocabularyItem, IdiomItem, SyntaxItem } from '@/lib/types';
 import type { AnalyzeSelectionResponse } from '@/lib/messages';
-import { useI18n } from '../i18n';
+import { formatErrorMessage, useI18n } from '../i18n';
 
 interface SelectionAnalysisModalProps {
   selection: string;
@@ -30,7 +30,7 @@ export function SelectionAnalysisModal({
       if (response.success && response.data) {
         setAnalysisResult(response.data);
       } else {
-        setError(response.error || 'Analysis failed');
+        setError(formatErrorMessage(t, response.errorCode, response.errorDetail, response.error));
       }
       setAnalyzing(false);
     };
