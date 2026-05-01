@@ -1,18 +1,23 @@
-import { getApiKey, getSettings } from '@/lib/storage';
+import { getApiKey, getSettings, addAnalysisRecord } from '@/lib/storage';
+import { updateStatisticsAfterAnalysis } from '@/lib/storage';
+import { shouldRemindToday, markReminderShown } from '@/lib/storage';
 import type { AnalysisResult } from '@/lib/types';
 import { ANALYSIS_SYSTEM_PROMPT, buildAnalysisPrompt } from '@/lib/prompts';
+import { makeRequest, cancelRequest, createRequestId } from '@/lib/network';
 import type {
   Message,
   AnalyzeTextResponse,
   ExtractContentResponse,
   HighlightTextResponse,
-  ClearHighlightsResponse
+  ClearHighlightsResponse,
 } from '@/lib/messages';
+import { syncAfterAnalysis } from '@/lib/github-sync';
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 
-// Call DeepSeek API for analysis
-async function analyzeWithDeepSeek(text: string): Promise<AnalyzeTextResponse> {
+const activeAnalysisRequests: Map<string, string> = new Map();
+
+async function analyzeWithDeepSeek(text: string, requestId?: string): Promise<AnalyzeTextResponse> {
   const apiKey = await getApiKey();
   const settings = await getSettings();
   
@@ -20,92 +25,123 @@ async function analyzeWithDeepSeek(text: string): Promise<AnalyzeTextResponse> {
     return {
       success: false,
       error: 'API Key not configured. Please set your DeepSeek API key in settings.',
+      errorType: 'invalid_key',
     };
   }
-  
+
+  const analysisRequestId = requestId || createRequestId();
+  activeAnalysisRequests.set(analysisRequestId, analysisRequestId);
+
   try {
-    const response = await fetch(DEEPSEEK_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+    const response = await makeRequest<{
+      choices: Array<{
+        message: {
+          content: string;
+        };
+      }>;
+      error?: {
+        message: string;
+      };
+    }>(
+      DEEPSEEK_API_URL,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [
+            {
+              role: 'system',
+              content: ANALYSIS_SYSTEM_PROMPT,
+            },
+            {
+              role: 'user',
+              content: buildAnalysisPrompt(text, {
+                vocabLevels: settings.vocabLevels,
+                maxIdioms: settings.maxIdioms,
+                maxSyntax: settings.maxSyntax,
+                maxVocabulary: settings.maxVocabulary,
+              }),
+            },
+          ],
+          temperature: 0.3,
+          response_format: { type: 'json_object' },
+        }),
       },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          {
-            role: 'system',
-            content: ANALYSIS_SYSTEM_PROMPT,
-          },
-          {
-            role: 'user',
-            content: buildAnalysisPrompt(text, {
-              vocabLevels: settings.vocabLevels,
-              maxIdioms: settings.maxIdioms,
-              maxSyntax: settings.maxSyntax,
-              maxVocabulary: settings.maxVocabulary,
-            }),
-          },
-        ],
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-      }),
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorMessage = errorData.error?.message || `API request failed with status ${response.status}`;
+      {
+        requestId: analysisRequestId,
+        config: {
+          timeout: 120000,
+          maxRetries: 2,
+          retryDelay: 2000,
+          retryOnStatusCodes: [429, 500, 502, 503, 504],
+        },
+      }
+    );
+
+    activeAnalysisRequests.delete(analysisRequestId);
+
+    if (!response.success) {
       return {
         success: false,
-        error: errorMessage,
+        error: response.error || 'Analysis failed',
+        errorType: response.errorType,
+        retryAfter: response.retryAfter,
       };
     }
-    
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
+
+    const data = response.data;
+    const content = data?.choices?.[0]?.message?.content;
     
     if (!content) {
       return {
         success: false,
         error: 'No response content from DeepSeek API',
+        errorType: 'api_error',
       };
     }
-    
-    // Parse the JSON response
+
     const analysis: AnalysisResult = JSON.parse(content);
-    
-    // Validate the structure
+
     if (!analysis.idioms || !analysis.syntax || !analysis.vocabulary) {
       return {
         success: false,
         error: 'Invalid analysis format received from API',
+        errorType: 'api_error',
       };
     }
+
     const allowed = new Set(settings.vocabLevels);
     analysis.vocabulary = (analysis.vocabulary || []).filter((v) => allowed.has(v.level));
     analysis.idioms = (analysis.idioms || []).slice(0, settings.maxIdioms);
     analysis.syntax = (analysis.syntax || []).slice(0, settings.maxSyntax);
-    analysis.vocabulary = (analysis.vocabulary || []).slice(0, settings.maxVocabulary);
-    
+    analysis.vocabulary = analysis.vocabulary.slice(0, settings.maxVocabulary);
+
     return {
       success: true,
       data: analysis,
     };
   } catch (error) {
+    activeAnalysisRequests.delete(analysisRequestId);
+
     if (error instanceof SyntaxError) {
       return {
         success: false,
         error: 'Failed to parse API response as JSON',
+        errorType: 'api_error',
       };
     }
     return {
       success: false,
       error: `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      errorType: 'unknown',
     };
   }
 }
 
-// Send message to content script in active tab
 async function sendToContentScript<T>(message: Message): Promise<T> {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   
@@ -116,16 +152,36 @@ async function sendToContentScript<T>(message: Message): Promise<T> {
   return await browser.tabs.sendMessage(tab.id, message);
 }
 
+async function checkAndSendReminder(): Promise<void> {
+  const shouldRemind = await shouldRemindToday();
+  if (shouldRemind) {
+    try {
+      await browser.notifications.create({
+        type: 'basic',
+        iconUrl: '/icon/128.png',
+        title: 'Nuance - Time to Learn',
+        message: 'Don\'t forget to practice your English today! Open an article and start learning.',
+      });
+      await markReminderShown();
+    } catch (e) {
+      console.log('Notification not available, skipping reminder');
+    }
+  }
+}
+
 export default defineBackground(() => {
-  // Handle extension icon click - open side panel
   browser.action.onClicked.addListener(async (tab) => {
     if (tab.id) {
-      // Open the side panel for this tab
       await browser.sidePanel.open({ tabId: tab.id });
     }
   });
-  
-  // Handle messages from sidepanel
+
+  browser.alarms?.onAlarm?.addListener(async (alarm) => {
+    if (alarm.name === 'nuance-reminder-check') {
+      await checkAndSendReminder();
+    }
+  });
+
   browser.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
     (async () => {
       try {
@@ -137,8 +193,36 @@ export default defineBackground(() => {
           }
           
           case 'ANALYZE_TEXT': {
-            const response = await analyzeWithDeepSeek(message.text);
+            const response = await analyzeWithDeepSeek(message.text, message.requestId);
+            
+            if (response.success && response.data) {
+              const articleData = {
+                title: 'Analyzed Content',
+                url: _sender.tab?.url || '',
+                analysis: response.data,
+              };
+              
+              try {
+                await addAnalysisRecord(articleData);
+                await updateStatisticsAfterAnalysis(
+                  response.data.vocabulary.length,
+                  response.data.idioms.length,
+                  response.data.syntax.length
+                );
+                await syncAfterAnalysis();
+              } catch (error) {
+                console.error('Failed to save analysis record:', error);
+              }
+            }
+            
             sendResponse(response);
+            break;
+          }
+
+          case 'CANCEL_ANALYSIS': {
+            const cancelled = cancelRequest(message.requestId);
+            activeAnalysisRequests.delete(message.requestId);
+            sendResponse({ success: cancelled });
             break;
           }
           
@@ -165,9 +249,19 @@ export default defineBackground(() => {
       }
     })();
     
-    // Return true to indicate async response
     return true;
   });
-  
+
+  browser.runtime.onInstalled.addListener(async () => {
+    try {
+      await browser.alarms?.create?.('nuance-reminder-check', {
+        periodInMinutes: 60,
+        delayInMinutes: 1,
+      });
+    } catch (e) {
+      console.log('Alarms API not available');
+    }
+  });
+
   console.log('[Nuance] Background service worker started');
 });
